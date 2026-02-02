@@ -1,0 +1,8 @@
+PyQt6
+sounddevice
+numpy
+webrtcvad-wheels
+groq
+openai
+pypdf
+python-dotenv
