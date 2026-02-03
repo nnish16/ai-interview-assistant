@@ -12,7 +12,8 @@ from src.ui.overlay import OverlayWindow
 
 class LLMWorker(QObject):
     """Worker to handle blocking LLM calls."""
-    stream_chunk = pyqtSignal(str)
+    transcription_ready = pyqtSignal(str)
+    answer_chunk = pyqtSignal(str)
     finished = pyqtSignal()
 
     def __init__(self, llm_service, audio_bytes):
@@ -28,11 +29,11 @@ class LLMWorker(QObject):
         else:
             text = str(transcription_obj) # Error string
 
-        # 2. Generate
-        self.stream_chunk.emit(f"\n[You]: {text}\n[AI]: ")
+        self.transcription_ready.emit(text)
 
+        # 2. Generate
         for chunk in self.llm_service.generate_answer(text):
-            self.stream_chunk.emit(chunk)
+            self.answer_chunk.emit(chunk)
 
         self.finished.emit()
 
@@ -135,7 +136,7 @@ class MainController(QObject):
                 pass
 
         self.overlay.set_status("processing")
-        self.overlay.clear_text()
+        # Removed clear_text to keep history
 
         # Run LLM in separate thread
         self.worker_thread = QThread()
@@ -158,6 +159,9 @@ class MainController(QObject):
         self.worker_thread.finished.connect(lambda: self.overlay.set_status("listening" if self.overlay.is_listening else "idle"))
 
         self.worker_thread.start()
+
+    def cleanup_thread(self):
+        self.worker_thread = None
 
 def main():
     app = QApplication(sys.argv)
