@@ -56,7 +56,7 @@ class StoryEngine:
         for r in rows:
             # r: id, tag, content, embedding_json
             try:
-                emb = np.array(json.loads(r[3]))
+                emb = np.array(json.loads(r[3]), dtype=np.float32)
                 self.stories_cache.append({
                     "content": r[2],
                     "embedding": emb,
