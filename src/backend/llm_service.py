@@ -61,7 +61,7 @@ class LLMService:
         logger.info("Context updated.")
 
     def transcribe(self, audio_bytes):
-        """Transcribes audio bytes using Groq Distil-Whisper."""
+        """Transcribes audio bytes using Groq Whisper."""
         if not self.groq_client:
             logger.error("Groq client not initialized")
             return "Error: Groq API Key missing"

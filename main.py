@@ -1,6 +1,6 @@
 import sys
 import threading
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtWidgets import QApplication, QMessageBox, QDialog
 from PyQt6.QtCore import QObject, pyqtSignal, QThread
 
 from src.backend.audio_stream import AudioService
@@ -77,6 +77,8 @@ class MainController(QObject):
         # Apply audio device config
         self.apply_audio_config()
 
+        self.report_thread = None
+
         # Show overlay
         self.overlay.show()
 
@@ -116,6 +118,13 @@ class MainController(QObject):
         self.overlay.set_status("processing")
 
     def handle_end_interview(self):
+        # Prevent double triggering
+        try:
+            if self.report_thread and self.report_thread.isRunning():
+                return
+        except RuntimeError:
+            self.report_thread = None
+
         self.audio_service.stop()
         self.overlay.set_status("processing")
         self.overlay.set_full_text("Generating interview report... Please wait.")
@@ -124,7 +133,9 @@ class MainController(QObject):
         self.report_worker = ReportWorker(self.llm_service)
         self.report_worker.moveToThread(self.report_thread)
         self.report_thread.started.connect(self.report_worker.run)
+        self.report_thread.finished.connect(self.report_thread.deleteLater)
         self.report_worker.finished.connect(self.report_thread.quit)
+        self.report_worker.finished.connect(self.report_worker.deleteLater)
         self.report_worker.finished.connect(QApplication.instance().quit)
         self.report_thread.start()
 
