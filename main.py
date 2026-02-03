@@ -73,12 +73,8 @@ class MainController(QObject):
         self.audio_service.audio_captured.connect(self.on_audio_captured)
         self.audio_service.audio_level.connect(self.overlay.update_audio_level)
 
-        self.worker_thread = None
-
         # Apply audio device config
         self.apply_audio_config()
-
-        self.report_thread = None
 
         # Show overlay
         self.overlay.show()
@@ -86,14 +82,12 @@ class MainController(QObject):
     def apply_audio_config(self):
         dev_idx = self.config.get("audio_device_index")
         if dev_idx is not None:
-            # Verify if index is valid or find by name (omitted for brevity, trusting index or wizard)
             self.audio_service.set_device(dev_idx)
 
     def reload_context(self):
         resume = self.config.get("resume_path")
         jd = self.config.get("job_description")
         self.llm_service.load_context(resume, jd)
-        # Also update keys in case they changed
         self.llm_service.update_keys(
             self.config.get("groq_api_key"),
             self.config.get("openrouter_api_key")
@@ -119,13 +113,6 @@ class MainController(QObject):
         self.overlay.set_status("processing")
 
     def handle_end_interview(self):
-        # Prevent double triggering
-        try:
-            if self.report_thread and self.report_thread.isRunning():
-                return
-        except RuntimeError:
-            self.report_thread = None
-
         self.audio_service.stop()
         self.overlay.set_status("processing")
         self.overlay.set_full_text("Generating interview report... Please wait.")
@@ -134,20 +121,19 @@ class MainController(QObject):
         self.report_worker = ReportWorker(self.llm_service)
         self.report_worker.moveToThread(self.report_thread)
         self.report_thread.started.connect(self.report_worker.run)
-        self.report_thread.finished.connect(self.report_thread.deleteLater)
         self.report_worker.finished.connect(self.report_thread.quit)
-        self.report_worker.finished.connect(self.report_worker.deleteLater)
         self.report_worker.finished.connect(QApplication.instance().quit)
         self.report_thread.start()
 
     def on_audio_captured(self, audio_bytes):
-        # Prevent overlapping processing and handle safe thread checks
-        try:
-            if self.worker_thread and self.worker_thread.isRunning():
-                return
-        except RuntimeError:
-             # Thread object might be deleted but reference exists
-             self.worker_thread = None
+        # FIX: Robust check to ensure thread exists and is VALID before checking isRunning
+        if hasattr(self, 'worker_thread') and self.worker_thread is not None:
+            try:
+                if self.worker_thread.isRunning():
+                    return
+            except RuntimeError:
+                # Thread was deleted but python reference remained; ignore and proceed
+                pass
 
         self.overlay.set_status("processing")
         # Removed clear_text to keep history
@@ -158,12 +144,18 @@ class MainController(QObject):
         self.worker.moveToThread(self.worker_thread)
 
         self.worker_thread.started.connect(self.worker.run)
-        self.worker.transcription_ready.connect(self.overlay.add_transcription)
-        self.worker.answer_chunk.connect(self.overlay.add_answer_chunk)
+        self.worker.stream_chunk.connect(self.overlay.update_text)
+        
+        # Cleanup Logic
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
-        self.worker_thread.finished.connect(self.cleanup_thread)
+        
+        # Reset the reference to None when done so we don't crash next time
+        def cleanup_reference():
+            self.worker_thread = None
+        self.worker_thread.finished.connect(cleanup_reference)
+        
         self.worker_thread.finished.connect(lambda: self.overlay.set_status("listening" if self.overlay.is_listening else "idle"))
 
         self.worker_thread.start()
@@ -173,7 +165,7 @@ class MainController(QObject):
 
 def main():
     app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False) # Keep running even if overlay is hidden (though it shouldn't be)
+    app.setQuitOnLastWindowClosed(False)
 
     # Check setup
     config = load_config()
@@ -181,11 +173,9 @@ def main():
         wizard = SetupWizard()
         if wizard.exec() != QDialog.DialogCode.Accepted:
             sys.exit(0)
-        # Reload config after wizard
         config = load_config()
 
     controller = MainController()
-
     sys.exit(app.exec())
 
 if __name__ == "__main__":
