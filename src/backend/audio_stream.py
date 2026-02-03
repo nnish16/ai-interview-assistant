@@ -18,6 +18,7 @@ class AudioService(QObject):
     audio_captured = pyqtSignal(bytes)  # Signal emitting raw WAV data or PCM bytes
     speaking_started = pyqtSignal()
     speaking_stopped = pyqtSignal()
+    audio_level = pyqtSignal(float) # Signal emitting RMS amplitude (0.0 - 1.0)
 
     def __init__(self, sample_rate=16000, frame_duration_ms=20, vad_aggressiveness=3):
         super().__init__()
@@ -122,6 +123,21 @@ class AudioService(QObject):
 
     def _process_frame(self, frame):
         """Process a single audio frame with VAD."""
+        # Calculate RMS for visualizer
+        # Frame is int16, so values are -32768 to 32767
+        # Convert to float for calculation
+        if frame.dtype != np.int16:
+            frame = frame.astype(np.int16)
+
+        rms = np.sqrt(np.mean(frame.astype(float)**2))
+        # Normalize to 0.0-1.0 roughly. Max int16 is 32768.
+        # Practical max for speech is often lower, but let's map it safely.
+        level = min(rms / 10000.0, 1.0) # Sensitivity tuning: 10000 as "max" volume
+        self.audio_level.emit(level)
+
+        if np.random.random() < 0.05: # Log RMS occasionally (5% of frames)
+             print(f"[Audio] RMS: {level:.3f}")
+
         # webrtcvad expects bytes
         frame_bytes = frame.tobytes()
 
@@ -136,7 +152,7 @@ class AudioService(QObject):
                 # Potential start of speech
                 self.is_speaking = True
                 self.speaking_started.emit()
-                logger.debug("Speech started")
+                print("[VAD] Speech DETECTED")
 
             self.speech_frames.append(frame_bytes)
             self.silence_frames = 0
@@ -149,7 +165,7 @@ class AudioService(QObject):
                     # Speech ended
                     self.is_speaking = False
                     self.speaking_stopped.emit()
-                    logger.debug("Speech ended")
+                    print("[VAD] Silence DETECTED")
 
                     # Check if utterance was long enough
                     if len(self.speech_frames) >= self.min_speech_frames:

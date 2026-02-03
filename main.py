@@ -70,6 +70,7 @@ class MainController(QObject):
         self.audio_service.speaking_started.connect(self.on_speech_start)
         self.audio_service.speaking_stopped.connect(self.on_speech_stop)
         self.audio_service.audio_captured.connect(self.on_audio_captured)
+        self.audio_service.audio_level.connect(self.overlay.update_audio_level)
 
         # Apply audio device config
         self.apply_audio_config()
