@@ -11,6 +11,13 @@ from src.backend.story_engine import StoryEngine
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LLMService")
 
+FREE_MODELS = [
+    "google/gemini-2.0-flash-exp:free",       # Primary: Fast & Smart
+    "google/gemini-2.0-pro-exp-02-05:free",   # Secondary: Very Smart
+    "meta-llama/llama-3.3-70b-instruct:free", # Backup: Proven Reliability
+    "microsoft/phi-3-medium-128k-instruct:free" # Safety Net: Extremely Fast
+]
+
 class LLMService:
     def __init__(self, db_manager, groq_key=None, openrouter_key=None):
         self.groq_key = groq_key or os.getenv("GROQ_API_KEY")
@@ -95,7 +102,7 @@ class LLMService:
             return f"Transcription Failed: {e}"
 
     def generate_answer(self, query):
-        """Streams answer from OpenRouter."""
+        """Streams answer from OpenRouter with model fallback."""
         if not self.or_client:
             logger.error("OpenRouter client not initialized")
             yield "Error: OpenRouter API Key missing"
@@ -108,7 +115,7 @@ class LLMService:
         if story_data:
             content = story_data.get('content', '')
             style = story_data.get('style', '')
-            rag_instruction = f"\n\nCONTEXT: {content} | STYLE INSTRUCTION: {style}"
+            rag_instruction = f"\n\nPRIORITY CONTEXT: The user provided a specific story for this question. You MUST use it.\nCONTEXT: {content} | STYLE INSTRUCTION: {style}"
             logger.info("Injecting RAG story into prompt.")
 
         messages = [
@@ -118,26 +125,37 @@ class LLMService:
         ]
 
         full_answer = ""
-        try:
-            stream = self.or_client.chat.completions.create(
-                model="google/gemini-2.0-flash-lite-preview-02-05:free",
-                messages=messages,
-                stream=True
-            )
+        success = False
 
-            for chunk in stream:
-                content = chunk.choices[0].delta.content
-                if content:
-                    full_answer += content
-                    yield content
+        for model in FREE_MODELS:
+            try:
+                logger.info(f"Attempting generation with model: {model}")
+                stream = self.or_client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    stream=True
+                )
 
+                for chunk in stream:
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        full_answer += content
+                        yield content
+
+                success = True
+                break # Success, stop trying models
+
+            except Exception as e:
+                logger.warning(f"Model {model} failed: {e}. Trying next...")
+                continue
+
+        if success:
             # Save to history
             self.transcript_history.append({"role": "user", "content": query})
             self.transcript_history.append({"role": "assistant", "content": full_answer})
-
-        except Exception as e:
-            logger.error(f"LLM Generation error: {e}")
-            yield f"Error: {e}"
+        else:
+            yield "Connection unstable. Please check API keys or try again later."
+            logger.error("All models failed.")
 
     def generate_report(self):
         """Generates a post-interview report and saves it to file."""
