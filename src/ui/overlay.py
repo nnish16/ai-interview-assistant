@@ -15,9 +15,11 @@ class OverlayWindow(QWidget):
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool
+            Qt.WindowType.Tool |
+            Qt.WindowType.WindowDoesNotAcceptFocus
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
         # Dimensions
         self.collapsed_height = 60
@@ -75,6 +77,16 @@ class OverlayWindow(QWidget):
         self.main_layout.addWidget(self.text_display)
 
         self.main_layout.addStretch()
+
+        # Audio Visualizer (Progress Bar Style)
+        self.audio_bar = QWidget()
+        self.audio_bar.setFixedHeight(4)
+        self.audio_bar.setStyleSheet("background-color: #333; border-radius: 2px;")
+        self.audio_bar_fill = QWidget(self.audio_bar)
+        self.audio_bar_fill.setFixedHeight(4)
+        self.audio_bar_fill.setStyleSheet("background-color: #00ff00; border-radius: 2px;")
+        self.audio_bar_fill.setFixedWidth(0)
+        self.main_layout.addWidget(self.audio_bar)
 
         # Shadow
         shadow = QGraphicsDropShadowEffect(self)
@@ -180,3 +192,15 @@ class OverlayWindow(QWidget):
             self.status_indicator.setStyleSheet("background-color: #ffff00; border-radius: 6px;") # Yellow
         else:
             self.status_indicator.setStyleSheet("background-color: #555; border-radius: 6px;") # Gray
+
+    def update_audio_level(self, level):
+        """Updates the audio visualizer bar. Level is 0.0 - 1.0"""
+        width = self.audio_bar.width()
+        fill_width = int(width * level)
+        self.audio_bar_fill.setFixedWidth(fill_width)
+
+        # Dynamic color based on level
+        if level > 0.8:
+            self.audio_bar_fill.setStyleSheet("background-color: #ff0000; border-radius: 2px;") # Clip warning
+        else:
+            self.audio_bar_fill.setStyleSheet("background-color: #00ff00; border-radius: 2px;")
