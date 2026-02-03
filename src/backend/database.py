@@ -44,11 +44,15 @@ class DatabaseManager:
         ''')
 
         # Stories table
+        # We handle migration naively for MVP by checking if style column exists or recreating
+        # But simpler: rely on StoryEngine to clear table if sync needed.
+        # Here we just ensure the CREATE statement has the column.
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS stories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 tag TEXT,
                 content TEXT,
+                style TEXT,
                 embedding TEXT
             )
         ''')
@@ -86,22 +90,46 @@ class DatabaseManager:
         conn.close()
         logger.debug(f"Saved transcript for {role}")
 
-    def add_story(self, tag, content, embedding_json):
+    def add_story(self, tag, content, style, embedding_json):
         """Adds a story with its embedding."""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO stories (tag, content, embedding)
-            VALUES (?, ?, ?)
-        ''', (tag, content, embedding_json))
+            INSERT INTO stories (tag, content, style, embedding)
+            VALUES (?, ?, ?, ?)
+        ''', (tag, content, style, embedding_json))
         conn.commit()
         conn.close()
 
     def get_all_stories(self):
-        """Returns list of (id, tag, content, embedding)."""
+        """Returns list of (id, tag, content, style, embedding)."""
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT id, tag, content, embedding FROM stories')
+        try:
+            cursor.execute('SELECT id, tag, content, style, embedding FROM stories')
+        except sqlite3.OperationalError:
+            # Fallback for old schema if migration didn't run (or handle migration here)
+            # For MVP, we will rely on StoryEngine clearing the table if needed
+            # But query might fail. Let's return minimal columns if style missing?
+            # Or just fail. Main plan says StoryEngine handles sync.
+            # If table exists but misses column, query fails.
+            # We should probably force recreation if needed or use * and parse.
+            # Let's assume we will drop/create in StoryEngine logic or manual intervention.
+            # Or better: alter table.
+            try:
+                cursor.execute('ALTER TABLE stories ADD COLUMN style TEXT')
+                cursor.execute('SELECT id, tag, content, style, embedding FROM stories')
+            except Exception:
+                # If alter fails (maybe already exists?), try select again or re-raise
+                cursor.execute('SELECT id, tag, content, style, embedding FROM stories')
+
         rows = cursor.fetchall()
         conn.close()
         return rows
+
+    def clear_stories(self):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM stories')
+        conn.commit()
+        conn.close()

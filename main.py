@@ -53,6 +53,17 @@ class ReportWorker(QObject):
         self.service.generate_report()
         self.finished.emit()
 
+class StartupWorker(QObject):
+    finished = pyqtSignal()
+
+    def __init__(self, story_engine):
+        super().__init__()
+        self.story_engine = story_engine
+
+    def run(self):
+        self.story_engine.initialize()
+        self.finished.emit()
+
 class MainController(QObject):
     def __init__(self):
         super().__init__()
@@ -92,6 +103,21 @@ class MainController(QObject):
 
         # Show overlay
         self.overlay.show()
+
+        # Async Startup
+        self.run_startup_tasks()
+
+    def run_startup_tasks(self):
+        self.overlay.set_full_text("Loading Knowledge Base... Please wait.")
+        self.startup_thread = QThread()
+        self.startup_worker = StartupWorker(self.llm_service.story_engine)
+        self.startup_worker.moveToThread(self.startup_thread)
+        self.startup_thread.started.connect(self.startup_worker.run)
+        self.startup_worker.finished.connect(self.startup_thread.quit)
+        self.startup_worker.finished.connect(self.startup_worker.deleteLater)
+        self.startup_thread.finished.connect(self.startup_thread.deleteLater)
+        self.startup_thread.finished.connect(lambda: self.overlay.set_full_text("Ready. Press 'M' to unmute."))
+        self.startup_thread.start()
 
     def apply_audio_config(self):
         dev_idx = self.config.get("audio_device_index")
