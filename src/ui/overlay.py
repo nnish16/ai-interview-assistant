@@ -20,6 +20,8 @@ class OverlayWindow(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        if hasattr(Qt.WidgetAttribute, "WA_MacAlwaysShowToolWindow"):
+             self.setAttribute(Qt.WidgetAttribute.WA_MacAlwaysShowToolWindow, True)
 
         # Dimensions
         self.collapsed_height = 60

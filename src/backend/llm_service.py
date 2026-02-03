@@ -61,7 +61,7 @@ class LLMService:
         logger.info("Context updated.")
 
     def transcribe(self, audio_bytes):
-        """Transcribes audio bytes using Groq Distil-Whisper."""
+        """Transcribes audio bytes using Groq Whisper."""
         if not self.groq_client:
             logger.error("Groq client not initialized")
             return "Error: Groq API Key missing"
@@ -80,7 +80,7 @@ class LLMService:
 
             transcription = self.groq_client.audio.transcriptions.create(
                 file=(wav_buffer.name, wav_buffer.read()),
-                model="distil-whisper-large-v3-en",
+                model="whisper-large-v3-turbo",
                 prompt="The audio is an interview question.",
                 response_format="text"
             )
@@ -106,7 +106,7 @@ class LLMService:
         full_answer = ""
         try:
             stream = self.or_client.chat.completions.create(
-                model="meta-llama/llama-3-8b-instruct:free",
+                model="meta-llama/llama-3.3-70b-instruct:free",
                 messages=messages,
                 stream=True
             )
@@ -142,7 +142,7 @@ class LLMService:
 
         try:
             response = self.or_client.chat.completions.create(
-                model="meta-llama/llama-3-8b-instruct:free",
+                model="meta-llama/llama-3.3-70b-instruct:free",
                 messages=messages
             )
             report = response.choices[0].message.content

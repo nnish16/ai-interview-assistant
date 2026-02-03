@@ -43,7 +43,7 @@ class TestLLMService(unittest.TestCase):
         self.service.groq_client.audio.transcriptions.create.assert_called_once()
         # Verify arguments
         call_args = self.service.groq_client.audio.transcriptions.create.call_args
-        self.assertEqual(call_args.kwargs['model'], "distil-whisper-large-v3-en")
+        self.assertEqual(call_args.kwargs['model'], "whisper-large-v3-turbo")
 
         # Verify it's a WAV file
         file_tuple = call_args.kwargs['file']
