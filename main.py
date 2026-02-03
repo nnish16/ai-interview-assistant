@@ -72,6 +72,8 @@ class MainController(QObject):
         self.audio_service.audio_captured.connect(self.on_audio_captured)
         self.audio_service.audio_level.connect(self.overlay.update_audio_level)
 
+        self.worker_thread = None
+
         # Apply audio device config
         self.apply_audio_config()
 
@@ -127,26 +129,34 @@ class MainController(QObject):
         self.report_thread.start()
 
     def on_audio_captured(self, audio_bytes):
-        # Prevent overlapping processing
-        if hasattr(self, 'thread') and self.thread.isRunning():
-            return
+        # Prevent overlapping processing and handle safe thread checks
+        try:
+            if self.worker_thread and self.worker_thread.isRunning():
+                return
+        except RuntimeError:
+             # Thread object might be deleted but reference exists
+             self.worker_thread = None
 
         self.overlay.set_status("processing")
         self.overlay.clear_text()
 
         # Run LLM in separate thread
-        self.thread = QThread()
+        self.worker_thread = QThread()
         self.worker = LLMWorker(self.llm_service, audio_bytes)
-        self.worker.moveToThread(self.thread)
+        self.worker.moveToThread(self.worker_thread)
 
-        self.thread.started.connect(self.worker.run)
+        self.worker_thread.started.connect(self.worker.run)
         self.worker.stream_chunk.connect(self.overlay.update_text)
-        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
-        self.thread.finished.connect(lambda: self.overlay.set_status("listening" if self.overlay.is_listening else "idle"))
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+        self.worker_thread.finished.connect(self.cleanup_thread)
+        self.worker_thread.finished.connect(lambda: self.overlay.set_status("listening" if self.overlay.is_listening else "idle"))
 
-        self.thread.start()
+        self.worker_thread.start()
+
+    def cleanup_thread(self):
+        self.worker_thread = None
 
 def main():
     app = QApplication(sys.argv)
