@@ -39,7 +39,11 @@ class LLMService:
         self.system_prompt_base = (
             "You are an interview assistant. Be brief, direct, and conversational. "
             "Do not use bullet points. Use natural language. "
-            "Base your answers on the provided resume and job description context."
+            "Base your answers on the provided resume and job description context. "
+            "STRATEGIC GOAL: Win the job. "
+            "GOLD NUGGET PROTOCOL: Scan the conversation history for 'Gold Nuggets' (hints the interviewer drops about their values, pain points, or specific needs). "
+            "EXECUTION: When answering, SUBTLY weave these values into your response. Do not explicitly say 'You mentioned...'. "
+            "Instead, DEMONSTRATE that you possess the specific trait or expertise they value. Position the user as the perfect solution to their specific pain points."
         )
 
     def _init_clients(self):
@@ -139,11 +143,19 @@ class LLMService:
             rag_instruction = f"\n\nPRIORITY CONTEXT: The user provided a specific story for this question. You MUST use it.\nCONTEXT: {content} | STYLE INSTRUCTION: {style}"
             logger.info("Injecting RAG story into prompt.")
 
+        # Active Memory: Get last 10 turns
+        recent_history = self.transcript_history[-10:] if self.transcript_history else []
+
         messages = [
             {"role": "system", "content": self.system_prompt_base + rag_instruction},
-            {"role": "system", "content": f"Context Data:\n{self.context_text}"},
-            {"role": "user", "content": query}
+            {"role": "system", "content": f"Context Data:\n{self.context_text}"}
         ]
+
+        # Inject history
+        messages.extend(recent_history)
+
+        # Add current query
+        messages.append({"role": "user", "content": query})
 
         full_answer = ""
         success = False
