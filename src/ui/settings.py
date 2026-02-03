@@ -50,12 +50,19 @@ class SettingsDialog(QDialog):
         self.jd_edit.setPlainText(self.config.get("job_description", ""))
         layout.addWidget(self.jd_edit)
 
-        # Strategic Notes / Cheat Sheet
-        layout.addWidget(QLabel("Strategic Notes / Cheat Sheet:"))
+        # Strategic Notes
+        layout.addWidget(QLabel("Strategic Notes:"))
         self.notes_edit = QTextEdit()
         self.notes_edit.setPlainText(self.config.get("strategic_notes", ""))
-        self.notes_edit.setPlaceholderText("Enter high-priority notes here (e.g., Interviewer Name, Key Talking Points)...")
+        self.notes_edit.setPlaceholderText("Enter high-level strategy, interviewer name, goals...")
         layout.addWidget(self.notes_edit)
+
+        # Cheat Sheet
+        layout.addWidget(QLabel("Cheat Sheet:"))
+        self.cheat_sheet_edit = QTextEdit()
+        self.cheat_sheet_edit.setPlainText(self.config.get("cheat_sheet", ""))
+        self.cheat_sheet_edit.setPlaceholderText("Enter specific technical details, facts, or quick references...")
+        layout.addWidget(self.cheat_sheet_edit)
 
         # Buttons
         self.save_btn = QPushButton("Save & Close")
@@ -89,6 +96,7 @@ class SettingsDialog(QDialog):
         self.config["zhipu_api_key"] = self.zhipu_key_edit.text()
         self.config["job_description"] = self.jd_edit.toPlainText()
         self.config["strategic_notes"] = self.notes_edit.toPlainText()
+        self.config["cheat_sheet"] = self.cheat_sheet_edit.toPlainText()
 
         # Handle Resume Copy
         original_path = self.resume_path_edit.text()

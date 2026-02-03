@@ -13,7 +13,8 @@ DEFAULT_CONFIG = {
     "zhipu_api_key": "",
     "resume_path": "",
     "job_description": "",
-    "strategic_notes": ""
+    "strategic_notes": "",
+    "cheat_sheet": ""
 }
 
 def load_config():
