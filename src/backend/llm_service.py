@@ -102,10 +102,13 @@ class LLMService:
             return
 
         # RAG Retrieval
-        story = self.story_engine.find_relevant_story(query)
         rag_instruction = ""
-        if story:
-            rag_instruction = f"\n\nRelevance Note: The user has a specific story for this topic: '{story}'. Use this to answer."
+        story_data = self.story_engine.find_relevant_story(query)
+
+        if story_data:
+            content = story_data.get('content', '')
+            style = story_data.get('style', '')
+            rag_instruction = f"\n\nCONTEXT: {content} | STYLE INSTRUCTION: {style}"
             logger.info("Injecting RAG story into prompt.")
 
         messages = [
@@ -117,7 +120,7 @@ class LLMService:
         full_answer = ""
         try:
             stream = self.or_client.chat.completions.create(
-                model="meta-llama/llama-3.3-70b-instruct:free",
+                model="google/gemini-2.0-flash-lite-preview-02-05:free",
                 messages=messages,
                 stream=True
             )
@@ -153,7 +156,7 @@ class LLMService:
 
         try:
             response = self.or_client.chat.completions.create(
-                model="meta-llama/llama-3.3-70b-instruct:free",
+                model="google/gemini-2.0-flash-lite-preview-02-05:free",
                 messages=messages
             )
             report = response.choices[0].message.content
