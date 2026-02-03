@@ -67,8 +67,8 @@ class LLMService:
             self.zhipu_key = zhipu_key
         self._init_clients()
 
-    def load_context(self, resume_path, jd_text):
-        """Loads and parses the resume and combines it with the JD."""
+    def load_context(self, resume_path, jd_text, strategic_notes=""):
+        """Loads and parses the resume and combines it with the JD and Strategic Notes."""
         resume_text = ""
         if resume_path and os.path.exists(resume_path):
             try:
@@ -82,7 +82,7 @@ class LLMService:
                 logger.error(f"Error loading resume: {e}")
                 resume_text = "[Error loading resume]"
 
-        self.context_text = f"RESUME:\n{resume_text}\n\nJOB DESCRIPTION:\n{jd_text}"
+        self.context_text = f"STRATEGIC CHEAT SHEET:\n{strategic_notes}\n\nRESUME:\n{resume_text}\n\nJOB DESCRIPTION:\n{jd_text}"
         logger.info("Context updated.")
 
     def verify_primary_connection(self):

@@ -2,10 +2,12 @@ import json
 import os
 import logging
 import numpy as np
+import glob
 from sentence_transformers import SentenceTransformer, util
 from src.backend.database import DatabaseManager
 
 STORIES_FILE = "data/stories.json"
+DATA_DIR = "data"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("StoryEngine")
 
@@ -24,10 +26,16 @@ class StoryEngine:
         logger.info("Story Engine Ready.")
 
     def load_stories_to_db(self):
-        """Smart Sync: Loads stories from JSON to DB if counts differ."""
-        rows = self.db.get_all_stories()
-
-        if not os.path.exists(STORIES_FILE):
+        """Smart Sync: Loads stories from JSON and text files to DB."""
+        # 1. Load JSON Stories
+        json_stories = []
+        if os.path.exists(STORIES_FILE):
+            try:
+                with open(STORIES_FILE, 'r') as f:
+                    json_stories = json.load(f)
+            except Exception as e:
+                logger.error(f"Error loading stories.json: {e}")
+        else:
             logger.warning(f"{STORIES_FILE} not found. Creating dummy.")
             dummy_data = [{
                 "tag": "Conflict",
@@ -36,32 +44,59 @@ class StoryEngine:
             }]
             with open(STORIES_FILE, 'w') as f:
                 json.dump(dummy_data, f, indent=4)
+                json_stories = dummy_data
 
-        try:
-            with open(STORIES_FILE, 'r') as f:
-                stories = json.load(f)
+        # 2. Load Text/MD Files (Deep Research)
+        text_stories = []
+        text_files = glob.glob(os.path.join(DATA_DIR, "*.txt")) + glob.glob(os.path.join(DATA_DIR, "*.md"))
 
-            # Check if sync needed
-            if len(rows) != len(stories):
-                logger.info(f"DB count ({len(rows)}) != JSON count ({len(stories)}). Re-syncing...")
-                self.db.clear_stories()
+        for filepath in text_files:
+            if os.path.basename(filepath) == "stories.json": continue
 
-                logger.info(f"Embedding {len(stories)} stories...")
-                for story in stories:
-                    embedding = self.model.encode(story['content'])
-                    emb_json = json.dumps(embedding.tolist())
-                    self.db.add_story(
-                        story.get('tag', ''),
-                        story['content'],
-                        story.get('style', ''),
-                        emb_json
-                    )
-                logger.info("Stories loaded to DB.")
-            else:
-                logger.info("DB is in sync with JSON.")
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
 
-        except Exception as e:
-            logger.error(f"Error loading stories: {e}")
+                # Simple chunking (e.g., by paragraphs or 500 chars)
+                # For now, let's treat double newline as separator
+                chunks = [c.strip() for c in content.split('\n\n') if c.strip()]
+
+                tag = os.path.splitext(os.path.basename(filepath))[0]
+
+                for chunk in chunks:
+                    if len(chunk) < 50: continue # Skip tiny chunks
+                    text_stories.append({
+                        "tag": tag,
+                        "content": chunk,
+                        "style": "Reference Material"
+                    })
+            except Exception as e:
+                logger.error(f"Error reading {filepath}: {e}")
+
+        all_stories = json_stories + text_stories
+
+        # Check against DB count
+        # Note: This simple count check implies we rebuild if ANY file added/removed changes the count.
+        # Ideally we'd hash checks, but for MVP this is fine.
+        rows = self.db.get_all_stories()
+
+        if len(rows) != len(all_stories):
+            logger.info(f"DB count ({len(rows)}) != Source count ({len(all_stories)}). Re-syncing...")
+            self.db.clear_stories()
+
+            logger.info(f"Embedding {len(all_stories)} items...")
+            for story in all_stories:
+                embedding = self.model.encode(story['content'])
+                emb_json = json.dumps(embedding.tolist())
+                self.db.add_story(
+                    story.get('tag', ''),
+                    story['content'],
+                    story.get('style', ''),
+                    emb_json
+                )
+            logger.info("Stories loaded to DB.")
+        else:
+            logger.info("DB is in sync with Source files.")
 
     def refresh_cache(self):
         """Loads stories from DB into memory for fast retrieval."""

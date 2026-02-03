@@ -142,7 +142,8 @@ class MainController(QObject):
     def reload_context(self):
         resume = self.config.get("resume_path")
         jd = self.config.get("job_description")
-        self.llm_service.load_context(resume, jd)
+        notes = self.config.get("strategic_notes", "")
+        self.llm_service.load_context(resume, jd, notes)
         # Also update keys in case they changed
         self.llm_service.update_keys(
             self.config.get("groq_api_key"),
