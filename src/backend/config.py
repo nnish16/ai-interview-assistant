@@ -10,6 +10,7 @@ DEFAULT_CONFIG = {
     "audio_device": None,
     "groq_api_key": "",
     "openrouter_api_key": "",
+    "zhipu_api_key": "",
     "resume_path": "",
     "job_description": ""
 }

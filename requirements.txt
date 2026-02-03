@@ -1,9 +1,10 @@
 PyQt6
 sounddevice
 numpy
-webrtcvad-wheels
-groq
+requests
 openai
-pypdf
+groq
 python-dotenv
-sentence-transformers
+webrtcvad-wheels
+pypdf
+zhipuai
