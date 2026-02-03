@@ -12,7 +12,8 @@ from src.ui.overlay import OverlayWindow
 
 class LLMWorker(QObject):
     """Worker to handle blocking LLM calls."""
-    stream_chunk = pyqtSignal(str)
+    transcription_ready = pyqtSignal(str)
+    answer_chunk = pyqtSignal(str)
     finished = pyqtSignal()
 
     def __init__(self, llm_service, audio_bytes):
@@ -28,11 +29,11 @@ class LLMWorker(QObject):
         else:
             text = str(transcription_obj) # Error string
 
-        # 2. Generate
-        self.stream_chunk.emit(f"\n[You]: {text}\n[AI]: ")
+        self.transcription_ready.emit(text)
 
+        # 2. Generate
         for chunk in self.llm_service.generate_answer(text):
-            self.stream_chunk.emit(chunk)
+            self.answer_chunk.emit(chunk)
 
         self.finished.emit()
 
@@ -140,28 +141,35 @@ class MainController(QObject):
         self.report_thread.start()
 
     def on_audio_captured(self, audio_bytes):
-        # Prevent overlapping processing
-        # FIX: Check against 'worker_thread' instead of 'thread' to avoid QObject name collision
-        if hasattr(self, 'worker_thread') and self.worker_thread.isRunning():
-            return
+        # Prevent overlapping processing and handle safe thread checks
+        try:
+            if self.worker_thread and self.worker_thread.isRunning():
+                return
+        except RuntimeError:
+             # Thread object might be deleted but reference exists
+             self.worker_thread = None
 
         self.overlay.set_status("processing")
-        self.overlay.clear_text()
+        # Removed clear_text to keep history
 
         # Run LLM in separate thread
-        # FIX: Renamed variable from self.thread to self.worker_thread
         self.worker_thread = QThread()
         self.worker = LLMWorker(self.llm_service, audio_bytes)
         self.worker.moveToThread(self.worker_thread)
 
         self.worker_thread.started.connect(self.worker.run)
-        self.worker.stream_chunk.connect(self.overlay.update_text)
+        self.worker.transcription_ready.connect(self.overlay.add_transcription)
+        self.worker.answer_chunk.connect(self.overlay.add_answer_chunk)
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+        self.worker_thread.finished.connect(self.cleanup_thread)
         self.worker_thread.finished.connect(lambda: self.overlay.set_status("listening" if self.overlay.is_listening else "idle"))
 
         self.worker_thread.start()
+
+    def cleanup_thread(self):
+        self.worker_thread = None
 
 def main():
     app = QApplication(sys.argv)
