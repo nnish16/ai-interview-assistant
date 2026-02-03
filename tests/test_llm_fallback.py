@@ -56,8 +56,8 @@ class TestLLMFallback(unittest.TestCase):
         result = list(gen)
 
         self.assertIn("Connection unstable", result[0])
-        # Called 4 times (length of FREE_MODELS)
-        self.assertEqual(self.service.or_client.chat.completions.create.call_count, 4)
+        # Called 5 times (length of FREE_MODELS)
+        self.assertEqual(self.service.or_client.chat.completions.create.call_count, 5)
 
 if __name__ == '__main__':
     unittest.main()

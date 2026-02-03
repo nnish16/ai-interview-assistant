@@ -12,10 +12,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LLMService")
 
 FREE_MODELS = [
-    "google/gemini-2.0-flash-exp:free",       # Primary: Fast & Smart
-    "google/gemini-2.0-pro-exp-02-05:free",   # Secondary: Very Smart
-    "meta-llama/llama-3.3-70b-instruct:free", # Backup: Proven Reliability
-    "microsoft/phi-3-medium-128k-instruct:free" # Safety Net: Extremely Fast
+    "google/gemma-3-27b-it:free",          # Primary: Brand new, high intelligence
+    "meta-llama/llama-3.3-70b-instruct:free", # Secondary: Proven reliability, very smart
+    "meta-llama/llama-3.2-3b-instruct:free",   # Tertiary: Ultra-fast fallback
+    "nousresearch/hermes-3-llama-3.1-405b:free", # Quartary: Massive knowledge safety net
+    "qwen/qwen-2.5-vl-7b-instruct:free"    # Final Resort
 ]
 
 class LLMService:
@@ -172,18 +173,31 @@ class LLMService:
             {"role": "user", "content": transcript_text}
         ]
 
-        try:
-            response = self.or_client.chat.completions.create(
-                model="google/gemini-2.0-flash-lite-preview-02-05:free",
-                messages=messages
-            )
-            report = response.choices[0].message.content
+        success = False
+        report = ""
 
-            with open("interview_report.txt", "w") as f:
-                f.write(report)
+        for model in FREE_MODELS:
+            try:
+                response = self.or_client.chat.completions.create(
+                    model=model,
+                    messages=messages
+                )
+                report = response.choices[0].message.content
+                success = True
+                break
+            except Exception as e:
+                logger.warning(f"Report generation with {model} failed: {e}")
+                continue
 
-            logger.info("Report generated and saved to interview_report.txt")
-            return report
-        except Exception as e:
-            logger.error(f"Report generation error: {e}")
-            return f"Error generating report: {e}"
+        if success:
+            try:
+                with open("interview_report.txt", "w") as f:
+                    f.write(report)
+                logger.info("Report generated and saved to interview_report.txt")
+                return report
+            except Exception as e:
+                logger.error(f"Error saving report: {e}")
+                return f"Error saving report: {e}"
+        else:
+            logger.error("Report generation failed with all models.")
+            return "Error generating report: All models failed."
