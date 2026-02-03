@@ -140,18 +140,16 @@ class MainController(QObject):
         self.report_thread.start()
 
     def on_audio_captured(self, audio_bytes):
-        # Prevent overlapping processing and handle safe thread checks
-        try:
-            if self.worker_thread and self.worker_thread.isRunning():
-                return
-        except RuntimeError:
-             # Thread object might be deleted but reference exists
-             self.worker_thread = None
+        # Prevent overlapping processing
+        # FIX: Check against 'worker_thread' instead of 'thread' to avoid QObject name collision
+        if hasattr(self, 'worker_thread') and self.worker_thread.isRunning():
+            return
 
         self.overlay.set_status("processing")
         self.overlay.clear_text()
 
         # Run LLM in separate thread
+        # FIX: Renamed variable from self.thread to self.worker_thread
         self.worker_thread = QThread()
         self.worker = LLMWorker(self.llm_service, audio_bytes)
         self.worker.moveToThread(self.worker_thread)
@@ -161,13 +159,9 @@ class MainController(QObject):
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
-        self.worker_thread.finished.connect(self.cleanup_thread)
         self.worker_thread.finished.connect(lambda: self.overlay.set_status("listening" if self.overlay.is_listening else "idle"))
 
         self.worker_thread.start()
-
-    def cleanup_thread(self):
-        self.worker_thread = None
 
 def main():
     app = QApplication(sys.argv)
