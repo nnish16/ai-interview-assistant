@@ -106,7 +106,7 @@ class OverlayWindow(QWidget):
         self.header_layout.addWidget(self.status_indicator)
 
         # Title
-        self.title_label = QLabel("Cluely")
+        self.title_label = QLabel("J.A.R.V.I.S.")
         self.title_label.setStyleSheet("color: white; font-weight: bold;")
         self.header_layout.addWidget(self.title_label)
         self.header_layout.addStretch()
@@ -124,6 +124,13 @@ class OverlayWindow(QWidget):
         self.settings_btn.setStyleSheet("border: none; background-color: transparent; font-size: 16px;")
         self.settings_btn.clicked.connect(self.request_settings.emit)
         self.header_layout.addWidget(self.settings_btn)
+
+        # Close
+        self.close_btn = QPushButton("✕")
+        self.close_btn.setFixedSize(30, 30)
+        self.close_btn.setStyleSheet("border: none; background-color: transparent; font-size: 14px;")
+        self.close_btn.clicked.connect(QApplication.instance().quit)
+        self.header_layout.addWidget(self.close_btn)
 
         self.main_layout.addLayout(self.header_layout)
 
@@ -158,7 +165,7 @@ class OverlayWindow(QWidget):
         self.main_layout.addWidget(self.audio_bar)
 
         # --- Footer (Hotkeys) ---
-        self.footer_label = QLabel("Space: Toggle Mute  •  ↑/↓: Scroll History")
+        self.footer_label = QLabel("M: Toggle Mute  •  ↑/↓: Scroll History")
         self.footer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.footer_label.setStyleSheet("color: rgba(255, 255, 255, 0.5); font-size: 10px; margin-top: 2px;")
         self.main_layout.addWidget(self.footer_label)
@@ -186,9 +193,9 @@ class OverlayWindow(QWidget):
         self.sc_down = QShortcut(QKeySequence(Qt.Key.Key_Down), self)
         self.sc_down.activated.connect(self.scroll_down)
 
-        # Space to toggle listening (if window has focus)
-        self.sc_space = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
-        self.sc_space.activated.connect(self.toggle_mute)
+        # Key 'M' to toggle listening (if window has focus)
+        self.sc_mute = QShortcut(QKeySequence(Qt.Key.Key_M), self)
+        self.sc_mute.activated.connect(self.toggle_mute)
 
     def scroll_up(self):
         if self.scroll_area.isVisible():
