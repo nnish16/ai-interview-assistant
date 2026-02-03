@@ -12,9 +12,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LLMService")
 
 FREE_MODELS = [
-    "google/gemma-3-27b-it:free",          # Primary: Brand new, high intelligence
-    "meta-llama/llama-3.3-70b-instruct:free", # Secondary: Proven reliability, very smart
-    "meta-llama/llama-3.2-3b-instruct:free",   # Tertiary: Ultra-fast fallback
+    "meta-llama/llama-3.2-3b-instruct:free",   # Primary: Ultra-fast, reliable fallback
+    "google/gemma-2-9b-it:free",               # Secondary: Reliable mid-size
+    "meta-llama/llama-3.3-70b-instruct:free", # Tertiary: Smart but sometimes slow
     "nousresearch/hermes-3-llama-3.1-405b:free", # Quartary: Massive knowledge safety net
     "qwen/qwen-2.5-vl-7b-instruct:free"    # Final Resort
 ]
