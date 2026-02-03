@@ -5,13 +5,14 @@ from openai import OpenAI
 from pypdf import PdfReader
 import io
 import wave
+from src.backend.story_engine import StoryEngine
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LLMService")
 
 class LLMService:
-    def __init__(self, groq_key=None, openrouter_key=None):
+    def __init__(self, db_manager, groq_key=None, openrouter_key=None):
         self.groq_key = groq_key or os.getenv("GROQ_API_KEY")
         self.openrouter_key = openrouter_key or os.getenv("OPENROUTER_API_KEY")
 
@@ -20,9 +21,12 @@ class LLMService:
 
         self._init_clients()
 
+        # RAG Engine
+        self.story_engine = StoryEngine(db_manager)
+
         self.context_text = ""
         self.transcript_history = []
-        self.system_prompt = (
+        self.system_prompt_base = (
             "You are an interview assistant. Be brief, direct, and conversational. "
             "Do not use bullet points. Use natural language. "
             "Base your answers on the provided resume and job description context."
@@ -97,8 +101,15 @@ class LLMService:
             yield "Error: OpenRouter API Key missing"
             return
 
+        # RAG Retrieval
+        story = self.story_engine.find_relevant_story(query)
+        rag_instruction = ""
+        if story:
+            rag_instruction = f"\n\nRelevance Note: The user has a specific story for this topic: '{story}'. Use this to answer."
+            logger.info("Injecting RAG story into prompt.")
+
         messages = [
-            {"role": "system", "content": self.system_prompt},
+            {"role": "system", "content": self.system_prompt_base + rag_instruction},
             {"role": "system", "content": f"Context Data:\n{self.context_text}"},
             {"role": "user", "content": query}
         ]

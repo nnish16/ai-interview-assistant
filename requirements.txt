@@ -6,3 +6,4 @@ groq
 openai
 pypdf
 python-dotenv
+sentence-transformers

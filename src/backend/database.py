@@ -1,0 +1,107 @@
+import sqlite3
+import datetime
+import os
+import logging
+
+DB_FILE = "data/cluely.db"
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("DatabaseManager")
+
+class DatabaseManager:
+    def __init__(self, db_path=DB_FILE):
+        self.db_path = db_path
+        # Ensure data dir exists
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        self.init_db()
+
+    def get_connection(self):
+        return sqlite3.connect(self.db_path)
+
+    def init_db(self):
+        """Initialize database tables."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        # Interviews table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS interviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                duration TEXT
+            )
+        ''')
+
+        # Transcripts table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS transcripts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                interview_id INTEGER,
+                role TEXT,
+                content TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(interview_id) REFERENCES interviews(id)
+            )
+        ''')
+
+        # Stories table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS stories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tag TEXT,
+                content TEXT,
+                embedding TEXT
+            )
+        ''')
+        # Note: Embedding stored as TEXT (json string) or BLOB.
+        # For simplicity with numpy, storing as json string or bytes is fine.
+
+        conn.commit()
+        conn.close()
+        logger.info("Database initialized.")
+
+    def create_interview(self):
+        """Creates a new interview session and returns its ID."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO interviews (date) VALUES (CURRENT_TIMESTAMP)')
+        interview_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        logger.info(f"Created interview session: {interview_id}")
+        return interview_id
+
+    def save_transcript(self, interview_id, role, content):
+        """Saves a message to the transcript."""
+        if not interview_id:
+            logger.warning("No interview ID provided, skipping save.")
+            return
+
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO transcripts (interview_id, role, content)
+            VALUES (?, ?, ?)
+        ''', (interview_id, role, content))
+        conn.commit()
+        conn.close()
+        logger.debug(f"Saved transcript for {role}")
+
+    def add_story(self, tag, content, embedding_json):
+        """Adds a story with its embedding."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO stories (tag, content, embedding)
+            VALUES (?, ?, ?)
+        ''', (tag, content, embedding_json))
+        conn.commit()
+        conn.close()
+
+    def get_all_stories(self):
+        """Returns list of (id, tag, content, embedding)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, tag, content, embedding FROM stories')
+        rows = cursor.fetchall()
+        conn.close()
+        return rows

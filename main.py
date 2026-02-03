@@ -5,6 +5,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, QThread
 
 from src.backend.audio_stream import AudioService
 from src.backend.llm_service import LLMService
+from src.backend.database import DatabaseManager
 from src.backend.config import load_config
 from src.ui.wizard import SetupWizard
 from src.ui.settings import SettingsDialog
@@ -14,6 +15,7 @@ class LLMWorker(QObject):
     """Worker to handle blocking LLM calls."""
     transcription_ready = pyqtSignal(str)
     answer_chunk = pyqtSignal(str)
+    answer_complete = pyqtSignal(str) # New signal for DB saving
     finished = pyqtSignal()
 
     def __init__(self, llm_service, audio_bytes):
@@ -32,9 +34,12 @@ class LLMWorker(QObject):
         self.transcription_ready.emit(text)
 
         # 2. Generate
+        full_answer = ""
         for chunk in self.llm_service.generate_answer(text):
+            full_answer += chunk
             self.answer_chunk.emit(chunk)
 
+        self.answer_complete.emit(full_answer)
         self.finished.emit()
 
 class ReportWorker(QObject):
@@ -53,6 +58,10 @@ class MainController(QObject):
         super().__init__()
         self.config = load_config()
 
+        # DB
+        self.db = DatabaseManager()
+        self.current_interview_id = self.db.create_interview()
+
         # UI
         self.overlay = OverlayWindow()
         self.overlay.request_settings.connect(self.open_settings)
@@ -61,6 +70,7 @@ class MainController(QObject):
 
         # Backend
         self.llm_service = LLMService(
+            db_manager=self.db,
             groq_key=self.config.get("groq_api_key"),
             openrouter_key=self.config.get("openrouter_api_key")
         )
@@ -159,7 +169,9 @@ class MainController(QObject):
 
         self.worker_thread.started.connect(self.worker.run)
         self.worker.transcription_ready.connect(self.overlay.add_transcription)
+        self.worker.transcription_ready.connect(self.save_user_transcript)
         self.worker.answer_chunk.connect(self.overlay.add_answer_chunk)
+        self.worker.answer_complete.connect(self.save_ai_transcript)
         self.worker.finished.connect(self.worker_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker_thread.finished.connect(self.worker_thread.deleteLater)
@@ -167,6 +179,12 @@ class MainController(QObject):
         self.worker_thread.finished.connect(lambda: self.overlay.set_status("listening" if self.overlay.is_listening else "idle"))
 
         self.worker_thread.start()
+
+    def save_user_transcript(self, text):
+        self.db.save_transcript(self.current_interview_id, "user", text)
+
+    def save_ai_transcript(self, text):
+        self.db.save_transcript(self.current_interview_id, "ai", text)
 
     def cleanup_thread(self):
         self.worker_thread = None
