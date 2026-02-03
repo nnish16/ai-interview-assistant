@@ -2,6 +2,7 @@ import os
 import logging
 from groq import Groq
 from openai import OpenAI
+from zhipuai import ZhipuAI
 from pypdf import PdfReader
 import io
 import wave
@@ -11,21 +12,22 @@ from src.backend.story_engine import StoryEngine
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LLMService")
 
-FREE_MODELS = [
-    "meta-llama/llama-3.2-3b-instruct:free",   # Primary: Ultra-fast, reliable fallback
-    "google/gemma-2-9b-it:free",               # Secondary: Reliable mid-size
-    "meta-llama/llama-3.3-70b-instruct:free", # Tertiary: Smart but sometimes slow
-    "nousresearch/hermes-3-llama-3.1-405b:free", # Quartary: Massive knowledge safety net
-    "qwen/qwen-2.5-vl-7b-instruct:free"    # Final Resort
+BACKUP_MODELS = [
+    "deepseek/deepseek-r1:free",
+    "meta-llama/llama-3.1-405b-instruct:free",
+    "google/gemini-2.0-flash-lite-preview-02-05:free",
+    "meta-llama/llama-3.2-3b-instruct:free",
 ]
 
 class LLMService:
-    def __init__(self, db_manager, groq_key=None, openrouter_key=None):
+    def __init__(self, db_manager, groq_key=None, openrouter_key=None, zhipu_key=None):
         self.groq_key = groq_key or os.getenv("GROQ_API_KEY")
         self.openrouter_key = openrouter_key or os.getenv("OPENROUTER_API_KEY")
+        self.zhipu_key = zhipu_key or os.getenv("ZHIPU_API_KEY")
 
         self.groq_client = None
         self.or_client = None
+        self.zhipu_client = None
 
         self._init_clients()
 
@@ -48,10 +50,17 @@ class LLMService:
                 base_url="https://openrouter.ai/api/v1",
                 api_key=self.openrouter_key,
             )
+        if self.zhipu_key:
+            try:
+                self.zhipu_client = ZhipuAI(api_key=self.zhipu_key)
+            except Exception as e:
+                logger.error(f"Failed to initialize ZhipuAI client: {e}")
 
-    def update_keys(self, groq_key, openrouter_key):
+    def update_keys(self, groq_key, openrouter_key, zhipu_key=None):
         self.groq_key = groq_key
         self.openrouter_key = openrouter_key
+        if zhipu_key:
+            self.zhipu_key = zhipu_key
         self._init_clients()
 
     def load_context(self, resume_path, jd_text):
@@ -71,6 +80,21 @@ class LLMService:
 
         self.context_text = f"RESUME:\n{resume_text}\n\nJOB DESCRIPTION:\n{jd_text}"
         logger.info("Context updated.")
+
+    def verify_primary_connection(self):
+        """Pings ZhipuAI to verify connection."""
+        if not self.zhipu_client:
+            return False
+        try:
+            response = self.zhipu_client.chat.completions.create(
+                model="glm-4-flash",
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=5
+            )
+            return True
+        except Exception as e:
+            logger.error(f"ZhipuAI Ping Failed: {e}")
+            return False
 
     def transcribe(self, audio_bytes):
         """Transcribes audio bytes using Groq Whisper."""
@@ -103,11 +127,7 @@ class LLMService:
             return f"Transcription Failed: {e}"
 
     def generate_answer(self, query):
-        """Streams answer from OpenRouter with model fallback."""
-        if not self.or_client:
-            logger.error("OpenRouter client not initialized")
-            yield "Error: OpenRouter API Key missing"
-            return
+        """Streams answer using ZhipuAI (Primary) with OpenRouter (Backup)."""
 
         # RAG Retrieval
         rag_instruction = ""
@@ -128,11 +148,12 @@ class LLMService:
         full_answer = ""
         success = False
 
-        for model in FREE_MODELS:
+        # 1. Try Primary (ZhipuAI)
+        if self.zhipu_client:
             try:
-                logger.info(f"Attempting generation with model: {model}")
-                stream = self.or_client.chat.completions.create(
-                    model=model,
+                logger.info("Attempting generation with Primary: GLM-4-Flash")
+                stream = self.zhipu_client.chat.completions.create(
+                    model="glm-4-flash",
                     messages=messages,
                     stream=True
                 )
@@ -144,11 +165,37 @@ class LLMService:
                         yield content
 
                 success = True
-                break # Success, stop trying models
-
             except Exception as e:
-                logger.warning(f"Model {model} failed: {e}. Trying next...")
-                continue
+                logger.warning(f"ZhipuAI (Primary) failed: {e}. Switching to backup...")
+
+        # 2. Backup (OpenRouter)
+        if not success:
+            if not self.or_client:
+                logger.error("OpenRouter client not initialized")
+                yield "Error: Primary failed and Backup key missing."
+                return
+
+            for model in BACKUP_MODELS:
+                try:
+                    logger.info(f"Attempting backup generation with model: {model}")
+                    stream = self.or_client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        stream=True
+                    )
+
+                    for chunk in stream:
+                        content = chunk.choices[0].delta.content
+                        if content:
+                            full_answer += content
+                            yield content
+
+                    success = True
+                    break # Success, stop trying models
+
+                except Exception as e:
+                    logger.warning(f"Backup Model {model} failed: {e}. Trying next...")
+                    continue
 
         if success:
             # Save to history
@@ -163,9 +210,6 @@ class LLMService:
         if not self.transcript_history:
             return "No transcript to analyze."
 
-        if not self.or_client:
-            return "Error: OpenRouter API Key missing."
-
         transcript_text = "\n".join([f"{msg['role'].upper()}: {msg['content']}" for msg in self.transcript_history])
 
         messages = [
@@ -176,18 +220,32 @@ class LLMService:
         success = False
         report = ""
 
-        for model in FREE_MODELS:
+        # Try Primary
+        if self.zhipu_client:
             try:
-                response = self.or_client.chat.completions.create(
-                    model=model,
+                response = self.zhipu_client.chat.completions.create(
+                    model="glm-4-flash",
                     messages=messages
                 )
                 report = response.choices[0].message.content
                 success = True
-                break
             except Exception as e:
-                logger.warning(f"Report generation with {model} failed: {e}")
-                continue
+                logger.warning(f"ZhipuAI report generation failed: {e}")
+
+        # Try Backup
+        if not success and self.or_client:
+            for model in BACKUP_MODELS:
+                try:
+                    response = self.or_client.chat.completions.create(
+                        model=model,
+                        messages=messages
+                    )
+                    report = response.choices[0].message.content
+                    success = True
+                    break
+                except Exception as e:
+                    logger.warning(f"Report generation with {model} failed: {e}")
+                    continue
 
         if success:
             try:

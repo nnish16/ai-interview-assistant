@@ -55,13 +55,20 @@ class ReportWorker(QObject):
 
 class StartupWorker(QObject):
     finished = pyqtSignal()
+    primary_connected = pyqtSignal(bool)
 
-    def __init__(self, story_engine):
+    def __init__(self, llm_service):
         super().__init__()
-        self.story_engine = story_engine
+        self.llm_service = llm_service
 
     def run(self):
-        self.story_engine.initialize()
+        # 1. Init Story Engine
+        self.llm_service.story_engine.initialize()
+
+        # 2. Verify Primary Connection (ZhipuAI)
+        is_connected = self.llm_service.verify_primary_connection()
+        self.primary_connected.emit(is_connected)
+
         self.finished.emit()
 
 class MainController(QObject):
@@ -83,7 +90,8 @@ class MainController(QObject):
         self.llm_service = LLMService(
             db_manager=self.db,
             groq_key=self.config.get("groq_api_key"),
-            openrouter_key=self.config.get("openrouter_api_key")
+            openrouter_key=self.config.get("openrouter_api_key"),
+            zhipu_key=self.config.get("zhipu_api_key")
         )
         # Load context if available
         self.reload_context()
@@ -110,14 +118,20 @@ class MainController(QObject):
     def run_startup_tasks(self):
         self.overlay.set_full_text("Loading Knowledge Base... Please wait.")
         self.startup_thread = QThread()
-        self.startup_worker = StartupWorker(self.llm_service.story_engine)
+        self.startup_worker = StartupWorker(self.llm_service)
         self.startup_worker.moveToThread(self.startup_thread)
         self.startup_thread.started.connect(self.startup_worker.run)
+        self.startup_worker.primary_connected.connect(self.on_startup_check_complete)
         self.startup_worker.finished.connect(self.startup_thread.quit)
         self.startup_worker.finished.connect(self.startup_worker.deleteLater)
         self.startup_thread.finished.connect(self.startup_thread.deleteLater)
-        self.startup_thread.finished.connect(lambda: self.overlay.set_full_text("Ready. Press 'M' to unmute."))
         self.startup_thread.start()
+
+    def on_startup_check_complete(self, is_primary_connected):
+        if is_primary_connected:
+            self.overlay.set_full_text("Ready. Connected to Primary Engine (GLM-4). Press 'M' to unmute.")
+        else:
+            self.overlay.set_full_text("Primary Unreachable. Switched to Backup Systems. Press 'M' to unmute.")
 
     def apply_audio_config(self):
         dev_idx = self.config.get("audio_device_index")
@@ -132,7 +146,8 @@ class MainController(QObject):
         # Also update keys in case they changed
         self.llm_service.update_keys(
             self.config.get("groq_api_key"),
-            self.config.get("openrouter_api_key")
+            self.config.get("openrouter_api_key"),
+            self.config.get("zhipu_api_key")
         )
 
     def open_settings(self):

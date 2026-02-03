@@ -28,6 +28,10 @@ class SettingsDialog(QDialog):
         self.or_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         form.addRow("OpenRouter API Key:", self.or_key_edit)
 
+        self.zhipu_key_edit = QLineEdit(self.config.get("zhipu_api_key", ""))
+        self.zhipu_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        form.addRow("ZhipuAI API Key:", self.zhipu_key_edit)
+
         layout.addLayout(form)
 
         # Resume Upload
@@ -75,6 +79,7 @@ class SettingsDialog(QDialog):
         # Update config dict
         self.config["groq_api_key"] = self.groq_key_edit.text()
         self.config["openrouter_api_key"] = self.or_key_edit.text()
+        self.config["zhipu_api_key"] = self.zhipu_key_edit.text()
         self.config["job_description"] = self.jd_edit.toPlainText()
 
         # Handle Resume Copy

@@ -11,7 +11,7 @@ from src.backend.llm_service import LLMService
 
 class TestLLMService(unittest.TestCase):
     def setUp(self):
-        self.service = LLMService(groq_key="test_groq", openrouter_key="test_or")
+        self.service = LLMService(db_manager=None, groq_key="test_groq", openrouter_key="test_or")
         # Mock clients
         self.service.groq_client = MagicMock()
         self.service.or_client = MagicMock()
