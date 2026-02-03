@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QApplication, QGraphicsDropShadowEffect,
                              QSizePolicy, QMenu, QScrollArea, QFrame, QSizeGrip, QScrollBar)
-from PyQt6.QtCore import Qt, QPoint, QRect, QPropertyAnimation, QEasingCurve, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, QPoint, QRect, QPropertyAnimation, QEasingCurve, pyqtSignal, QSize, QEvent
 from PyQt6.QtGui import QColor, QPainter, QBrush, QPen, QIcon, QFont, QAction, QShortcut, QKeySequence
 
 class ConversationItem(QWidget):
@@ -25,6 +25,39 @@ class ConversationItem(QWidget):
     def append_text(self, text):
         self.text_label.setText(self.text_label.text() + text)
 
+class DragScrollArea(QScrollArea):
+    """A ScrollArea that allows dragging the window if clicking on non-interactive parts."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.start_pos = None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            # Check if we clicked on a scrollbar
+            if self.verticalScrollBar().geometry().contains(event.pos()):
+                super().mousePressEvent(event)
+                return
+
+            self.start_pos = event.globalPosition().toPoint()
+            # Don't call super() if we want to intercept drag, BUT we need selection to work.
+            # If text is selectable, QLabel handles it.
+            # We let event propagate.
+            super().mousePressEvent(event)
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self.start_pos:
+            delta = event.globalPosition().toPoint() - self.start_pos
+            # Move the parent window
+            self.window().move(self.window().pos() + delta)
+            self.start_pos = event.globalPosition().toPoint()
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self.start_pos = None
+        super().mouseReleaseEvent(event)
+
 class OverlayWindow(QWidget):
     request_settings = pyqtSignal()
     toggle_listening = pyqtSignal(bool) # True = Start, False = Stop/Pause
@@ -38,6 +71,7 @@ class OverlayWindow(QWidget):
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
             Qt.WindowType.Tool
+            # Removed WindowDoesNotAcceptFocus to allow hotkeys and interaction
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
@@ -45,9 +79,9 @@ class OverlayWindow(QWidget):
              self.setAttribute(Qt.WidgetAttribute.WA_MacAlwaysShowToolWindow, True)
 
         # Dimensions
-        self.collapsed_height = 60
+        self.collapsed_height = 80 # Taller for footer
         self.expanded_height = 400
-        self.width_val = 600 # Wider
+        self.width_val = 600
         self.resize(self.width_val, self.collapsed_height)
 
         # State
@@ -59,6 +93,7 @@ class OverlayWindow(QWidget):
         # Layout
         self.main_layout = QVBoxLayout()
         self.main_layout.setContentsMargins(10, 10, 10, 10)
+        self.main_layout.setSpacing(5)
         self.setLayout(self.main_layout)
 
         # --- Header ---
@@ -93,14 +128,16 @@ class OverlayWindow(QWidget):
         self.main_layout.addLayout(self.header_layout)
 
         # --- Scroll Area for History ---
-        self.scroll_area = QScrollArea()
+        # Use custom DragScrollArea
+        self.scroll_area = DragScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setStyleSheet("""
             QScrollArea { border: none; background: transparent; }
             QScrollBar:vertical { width: 8px; background: #333; border-radius: 4px; }
             QScrollBar::handle:vertical { background: #555; border-radius: 4px; }
         """)
-        self.scroll_area.hide() # Hidden initially
+        # Keep visible even if empty to take up space/allow drag? No, hide if empty/collapsed.
+        self.scroll_area.hide()
 
         self.content_widget = QWidget()
         self.content_layout = QVBoxLayout()
@@ -119,6 +156,12 @@ class OverlayWindow(QWidget):
         self.audio_bar_fill.setStyleSheet("background-color: #00ff00; border-radius: 2px;")
         self.audio_bar_fill.setFixedWidth(0)
         self.main_layout.addWidget(self.audio_bar)
+
+        # --- Footer (Hotkeys) ---
+        self.footer_label = QLabel("Space: Toggle Mute  •  ↑/↓: Scroll History")
+        self.footer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.footer_label.setStyleSheet("color: rgba(255, 255, 255, 0.5); font-size: 10px; margin-top: 2px;")
+        self.main_layout.addWidget(self.footer_label)
 
         # --- Resize Grip ---
         self.sizegrip = QSizeGrip(self)
@@ -148,12 +191,14 @@ class OverlayWindow(QWidget):
         self.sc_space.activated.connect(self.toggle_mute)
 
     def scroll_up(self):
-        val = self.scroll_area.verticalScrollBar().value()
-        self.scroll_area.verticalScrollBar().setValue(val - 50)
+        if self.scroll_area.isVisible():
+            val = self.scroll_area.verticalScrollBar().value()
+            self.scroll_area.verticalScrollBar().setValue(val - 50)
 
     def scroll_down(self):
-        val = self.scroll_area.verticalScrollBar().value()
-        self.scroll_area.verticalScrollBar().setValue(val + 50)
+        if self.scroll_area.isVisible():
+            val = self.scroll_area.verticalScrollBar().value()
+            self.scroll_area.verticalScrollBar().setValue(val + 50)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -171,10 +216,8 @@ class OverlayWindow(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            # Only drag if not clicking interactions
-            child = self.childAt(event.pos())
-            if child == self or child == self.content_widget:
-                self.old_pos = event.globalPosition().toPoint()
+            # Check for direct child widgets that didn't consume event
+            self.old_pos = event.globalPosition().toPoint()
 
     def mouseMoveEvent(self, event):
         if self.old_pos:
@@ -237,15 +280,12 @@ class OverlayWindow(QWidget):
         self.scroll_to_bottom()
 
     def clear_text(self):
-        # We might want to keep history now, so maybe don't clear?
-        # Or just clear for new session?
-        # User said "go back to history on scroll", so we should NOT clear.
+        # Keep history
         pass
 
     def update_text(self, text):
-        """Backward compatibility for MainController's stream_chunk logic."""
-        # MainController emits "\n[You]: text\n[AI]: chunk"
-        # This is messy. We should update MainController.
+        """Backward compatibility for MainController's stream_chunk logic.
+           Should not be called if MainController is fixed, but harmless pass."""
         pass
 
     def scroll_to_bottom(self):
