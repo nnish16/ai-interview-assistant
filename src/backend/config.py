@@ -12,7 +12,8 @@ DEFAULT_CONFIG = {
     "openrouter_api_key": "",
     "zhipu_api_key": "",
     "resume_path": "",
-    "job_description": ""
+    "job_description": "",
+    "strategic_notes": ""
 }
 
 def load_config():

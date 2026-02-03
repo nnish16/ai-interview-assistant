@@ -50,6 +50,13 @@ class SettingsDialog(QDialog):
         self.jd_edit.setPlainText(self.config.get("job_description", ""))
         layout.addWidget(self.jd_edit)
 
+        # Strategic Notes / Cheat Sheet
+        layout.addWidget(QLabel("Strategic Notes / Cheat Sheet:"))
+        self.notes_edit = QTextEdit()
+        self.notes_edit.setPlainText(self.config.get("strategic_notes", ""))
+        self.notes_edit.setPlaceholderText("Enter high-priority notes here (e.g., Interviewer Name, Key Talking Points)...")
+        layout.addWidget(self.notes_edit)
+
         # Buttons
         self.save_btn = QPushButton("Save & Close")
         self.save_btn.clicked.connect(self.save_settings)
@@ -81,6 +88,7 @@ class SettingsDialog(QDialog):
         self.config["openrouter_api_key"] = self.or_key_edit.text()
         self.config["zhipu_api_key"] = self.zhipu_key_edit.text()
         self.config["job_description"] = self.jd_edit.toPlainText()
+        self.config["strategic_notes"] = self.notes_edit.toPlainText()
 
         # Handle Resume Copy
         original_path = self.resume_path_edit.text()
