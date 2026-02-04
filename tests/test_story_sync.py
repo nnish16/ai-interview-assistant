@@ -6,6 +6,9 @@ import sqlite3
 import sys
 import numpy as np
 
+# Mock sentence_transformers before import
+sys.modules['sentence_transformers'] = MagicMock()
+
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 

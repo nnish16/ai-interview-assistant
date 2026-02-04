@@ -78,10 +78,10 @@ class StoryEngine:
         # Check against DB count
         # Note: This simple count check implies we rebuild if ANY file added/removed changes the count.
         # Ideally we'd hash checks, but for MVP this is fine.
-        rows = self.db.get_all_stories()
+        db_count = self.db.get_story_count()
 
-        if len(rows) != len(all_stories):
-            logger.info(f"DB count ({len(rows)}) != Source count ({len(all_stories)}). Re-syncing...")
+        if db_count != len(all_stories):
+            logger.info(f"DB count ({db_count}) != Source count ({len(all_stories)}). Re-syncing...")
             self.db.clear_stories()
 
             logger.info(f"Embedding {len(all_stories)} items...")
