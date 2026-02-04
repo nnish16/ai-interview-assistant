@@ -53,11 +53,10 @@ class DatabaseManager:
                 tag TEXT,
                 content TEXT,
                 style TEXT,
-                embedding TEXT
+                embedding BLOB
             )
         ''')
-        # Note: Embedding stored as TEXT (json string) or BLOB.
-        # For simplicity with numpy, storing as json string or bytes is fine.
+        # Note: Embedding stored as BLOB for performance.
 
         conn.commit()
         conn.close()
@@ -156,3 +155,21 @@ class DatabaseManager:
         cursor.execute('DELETE FROM stories')
         conn.commit()
         conn.close()
+
+    def recreate_stories_table(self):
+        """Drops and recreates the stories table to ensure correct schema."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DROP TABLE IF EXISTS stories')
+        cursor.execute('''
+            CREATE TABLE stories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tag TEXT,
+                content TEXT,
+                style TEXT,
+                embedding BLOB
+            )
+        ''')
+        conn.commit()
+        conn.close()
+        logger.info("Recreated stories table.")

@@ -80,9 +80,20 @@ class StoryEngine:
         # Ideally we'd hash checks, but for MVP this is fine.
         rows = self.db.get_all_stories()
 
-        if len(rows) != len(all_stories):
-            logger.info(f"DB count ({len(rows)}) != Source count ({len(all_stories)}). Re-syncing...")
-            self.db.clear_stories()
+        # Check for legacy format (JSON string vs BLOB)
+        # If the first row's embedding is a string, we need to rebuild.
+        legacy_format = False
+        if rows:
+            if isinstance(rows[0][4], str):
+                legacy_format = True
+
+        if len(rows) != len(all_stories) or legacy_format:
+            if legacy_format:
+                logger.info("Detected legacy JSON storage. Upgrading to BLOB...")
+                self.db.recreate_stories_table()
+            else:
+                logger.info(f"DB count ({len(rows)}) != Source count ({len(all_stories)}). Re-syncing...")
+                self.db.clear_stories()
 
             logger.info(f"Embedding {len(all_stories)} items...")
 
@@ -93,12 +104,13 @@ class StoryEngine:
             # Prepare for bulk insert
             stories_data = []
             for story, embedding in zip(all_stories, embeddings):
-                emb_json = json.dumps(embedding.tolist())
+                # Optimization: Store as binary blob instead of JSON
+                emb_blob = embedding.tobytes()
                 stories_data.append((
                     story.get('tag', ''),
                     story['content'],
                     story.get('style', ''),
-                    emb_json
+                    emb_blob
                 ))
 
             self.db.bulk_add_stories(stories_data)
@@ -114,9 +126,10 @@ class StoryEngine:
         embeddings_list = []
 
         for r in rows:
-            # r: id, tag, content, style, embedding_json
+            # r: id, tag, content, style, embedding_blob
             try:
-                emb = np.array(json.loads(r[4]), dtype=np.float32)
+                # Optimization: Load direct from binary
+                emb = np.frombuffer(r[4], dtype=np.float32)
                 new_stories_cache.append({
                     "content": r[2],
                     "style": r[3],
