@@ -15,8 +15,7 @@ class StoryEngine:
     def __init__(self, db_manager: DatabaseManager):
         self.db = db_manager
         self.model = None # Lazy load
-        self.stories_cache = [] # List of dicts: {content, style, embedding}
-        self.story_embeddings_matrix = None # Tensor/Array of all embeddings
+        self.cache_bundle = {"stories": [], "matrix": None} # Atomic bundle
 
     def initialize(self):
         """Initializes the model and syncs DB. Call this from a background thread."""
@@ -128,25 +127,32 @@ class StoryEngine:
             except Exception as e:
                 logger.error(f"Error parsing story {r[0]}: {e}")
 
-        # Atomic assignment
-        self.stories_cache = new_stories_cache
-        if embeddings_list:
-            self.story_embeddings_matrix = np.stack(embeddings_list)
-        else:
-            self.story_embeddings_matrix = None
+        # Prepare atomic bundle
+        matrix = np.stack(embeddings_list) if embeddings_list else None
 
-        logger.info(f"Story cache refreshed. {len(self.stories_cache)} stories active.")
+        # Atomic assignment
+        self.cache_bundle = {
+            "stories": new_stories_cache,
+            "matrix": matrix
+        }
+
+        logger.info(f"Story cache refreshed. {len(new_stories_cache)} stories active.")
 
     def find_relevant_story(self, query, threshold=0.4):
         """Finds the most relevant story for the query."""
-        if not self.stories_cache or not self.model or self.story_embeddings_matrix is None:
+        # Read bundle once for consistency
+        bundle = self.cache_bundle
+        stories = bundle["stories"]
+        matrix = bundle["matrix"]
+
+        if not stories or not self.model or matrix is None:
             return None
 
         query_emb = self.model.encode(query)
 
         # Vectorized similarity calculation
         # util.cos_sim returns a tensor (1, N)
-        scores = util.cos_sim(query_emb, self.story_embeddings_matrix)[0]
+        scores = util.cos_sim(query_emb, matrix)[0]
 
         # Find best match
         best_idx = scores.argmax().item()
@@ -155,5 +161,5 @@ class StoryEngine:
         logger.info(f"Query: '{query}' | Best Score: {max_score:.3f}")
 
         if max_score >= threshold:
-            return self.stories_cache[best_idx]
+            return stories[best_idx]
         return None
