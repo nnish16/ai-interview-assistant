@@ -29,6 +29,7 @@ class AudioService(QObject):
         self.running = False
         self.stream = None
         self.buffer = queue.Queue()
+        self.log_queue = queue.Queue()
         self.frame_size = int(sample_rate * frame_duration_ms / 1000)
 
         # VAD state
@@ -82,6 +83,9 @@ class AudioService(QObject):
                 self.device_index = sd.default.device[0]
 
         self.running = True
+        self.log_thread = threading.Thread(target=self._log_worker)
+        self.log_thread.start()
+
         self.thread = threading.Thread(target=self._process_loop)
         self.thread.start()
         logger.info("Audio service started.")
@@ -94,7 +98,18 @@ class AudioService(QObject):
             self.stream.close()
         if hasattr(self, 'thread') and self.thread.is_alive():
             self.thread.join()
+        if hasattr(self, 'log_thread') and self.log_thread.is_alive():
+            self.log_thread.join()
         logger.info("Audio service stopped.")
+
+    def _log_worker(self):
+        """Worker thread for processing log messages to avoid blocking the audio loop."""
+        while self.running or not self.log_queue.empty():
+            try:
+                msg = self.log_queue.get(timeout=0.1)
+                print(msg)
+            except queue.Empty:
+                continue
 
     def _process_loop(self):
         """Loop to read buffer, process VAD, and manage state."""
@@ -136,7 +151,7 @@ class AudioService(QObject):
         self.audio_level.emit(level)
 
         if np.random.random() < 0.05: # Log RMS occasionally (5% of frames)
-             print(f"[Audio] RMS: {level:.3f}")
+             self.log_queue.put(f"[Audio] RMS: {level:.3f}")
 
         # webrtcvad expects bytes
         frame_bytes = frame.tobytes()
@@ -152,7 +167,7 @@ class AudioService(QObject):
                 # Potential start of speech
                 self.is_speaking = True
                 self.speaking_started.emit()
-                print("[VAD] Speech DETECTED")
+                self.log_queue.put("[VAD] Speech DETECTED")
 
             self.speech_frames.append(frame_bytes)
             self.silence_frames = 0
@@ -165,7 +180,7 @@ class AudioService(QObject):
                     # Speech ended
                     self.is_speaking = False
                     self.speaking_stopped.emit()
-                    print("[VAD] Silence DETECTED")
+                    self.log_queue.put("[VAD] Silence DETECTED")
 
                     # Check if utterance was long enough
                     if len(self.speech_frames) >= self.min_speech_frames:
