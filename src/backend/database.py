@@ -101,6 +101,29 @@ class DatabaseManager:
         conn.commit()
         conn.close()
 
+    def bulk_add_stories(self, stories_data):
+        """
+        Adds multiple stories in a single transaction.
+        stories_data: List of tuples (tag, content, style, embedding_json)
+        """
+        if not stories_data:
+            return
+
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.executemany('''
+                INSERT INTO stories (tag, content, style, embedding)
+                VALUES (?, ?, ?, ?)
+            ''', stories_data)
+            conn.commit()
+            logger.info(f"Bulk added {len(stories_data)} stories.")
+        except Exception as e:
+            logger.error(f"Error in bulk_add_stories: {e}")
+            conn.rollback()
+        finally:
+            conn.close()
+
     def get_all_stories(self):
         """Returns list of (id, tag, content, style, embedding)."""
         conn = self.get_connection()

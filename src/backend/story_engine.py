@@ -85,15 +85,23 @@ class StoryEngine:
             self.db.clear_stories()
 
             logger.info(f"Embedding {len(all_stories)} items...")
-            for story in all_stories:
-                embedding = self.model.encode(story['content'])
+
+            # Batch encode
+            contents = [story['content'] for story in all_stories]
+            embeddings = self.model.encode(contents)
+
+            # Prepare for bulk insert
+            stories_data = []
+            for story, embedding in zip(all_stories, embeddings):
                 emb_json = json.dumps(embedding.tolist())
-                self.db.add_story(
+                stories_data.append((
                     story.get('tag', ''),
                     story['content'],
                     story.get('style', ''),
                     emb_json
-                )
+                ))
+
+            self.db.bulk_add_stories(stories_data)
             logger.info("Stories loaded to DB.")
         else:
             logger.info("DB is in sync with Source files.")
