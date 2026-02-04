@@ -16,6 +16,7 @@ class StoryEngine:
         self.db = db_manager
         self.model = None # Lazy load
         self.stories_cache = [] # List of dicts: {content, style, embedding}
+        self.story_embeddings_matrix = None # Tensor/Array of all embeddings
 
     def initialize(self):
         """Initializes the model and syncs DB. Call this from a background thread."""
@@ -109,39 +110,50 @@ class StoryEngine:
     def refresh_cache(self):
         """Loads stories from DB into memory for fast retrieval."""
         rows = self.db.get_all_stories()
-        self.stories_cache = []
+
+        new_stories_cache = []
+        embeddings_list = []
+
         for r in rows:
             # r: id, tag, content, style, embedding_json
             try:
                 emb = np.array(json.loads(r[4]), dtype=np.float32)
-                self.stories_cache.append({
+                new_stories_cache.append({
                     "content": r[2],
                     "style": r[3],
                     "embedding": emb,
                     "tag": r[1]
                 })
+                embeddings_list.append(emb)
             except Exception as e:
                 logger.error(f"Error parsing story {r[0]}: {e}")
+
+        # Atomic assignment
+        self.stories_cache = new_stories_cache
+        if embeddings_list:
+            self.story_embeddings_matrix = np.stack(embeddings_list)
+        else:
+            self.story_embeddings_matrix = None
+
         logger.info(f"Story cache refreshed. {len(self.stories_cache)} stories active.")
 
     def find_relevant_story(self, query, threshold=0.4):
         """Finds the most relevant story for the query."""
-        if not self.stories_cache or not self.model:
+        if not self.stories_cache or not self.model or self.story_embeddings_matrix is None:
             return None
 
         query_emb = self.model.encode(query)
 
-        best_match = None
-        max_score = -1
+        # Vectorized similarity calculation
+        # util.cos_sim returns a tensor (1, N)
+        scores = util.cos_sim(query_emb, self.story_embeddings_matrix)[0]
 
-        for story in self.stories_cache:
-            score = util.cos_sim(query_emb, story['embedding']).item()
-            if score > max_score:
-                max_score = score
-                best_match = story # Return whole dict (content + style)
+        # Find best match
+        best_idx = scores.argmax().item()
+        max_score = scores[best_idx].item()
 
         logger.info(f"Query: '{query}' | Best Score: {max_score:.3f}")
 
         if max_score >= threshold:
-            return best_match
+            return self.stories_cache[best_idx]
         return None
