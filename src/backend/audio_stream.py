@@ -125,11 +125,14 @@ class AudioService(QObject):
         """Process a single audio frame with VAD."""
         # Calculate RMS for visualizer
         # Frame is int16, so values are -32768 to 32767
-        # Convert to float for calculation
-        if frame.dtype != np.int16:
-            frame = frame.astype(np.int16)
 
-        rms = np.sqrt(np.mean(frame.astype(float)**2))
+        # Optimized RMS calculation:
+        # 1. Flatten to ensure 1D for dot product
+        # 2. Cast to int64 to prevent overflow during squaring/summing
+        # 3. Use dot product for fast sum-of-squares
+        flat_frame = frame.ravel()
+        mean_sq = np.dot(flat_frame.astype(np.int64), flat_frame) / flat_frame.size
+        rms = np.sqrt(mean_sq)
         # Normalize to 0.0-1.0 roughly. Max int16 is 32768.
         # Practical max for speech is often lower, but let's map it safely.
         level = min(rms / 10000.0, 1.0) # Sensitivity tuning: 10000 as "max" volume
