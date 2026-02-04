@@ -78,22 +78,11 @@ class StoryEngine:
         # Check against DB count
         # Note: This simple count check implies we rebuild if ANY file added/removed changes the count.
         # Ideally we'd hash checks, but for MVP this is fine.
-        rows = self.db.get_all_stories()
+        db_count = self.db.get_story_count()
 
-        # Check for legacy format (JSON string vs BLOB)
-        # If the first row's embedding is a string, we need to rebuild.
-        legacy_format = False
-        if rows:
-            if isinstance(rows[0][4], str):
-                legacy_format = True
-
-        if len(rows) != len(all_stories) or legacy_format:
-            if legacy_format:
-                logger.info("Detected legacy JSON storage. Upgrading to BLOB...")
-                self.db.recreate_stories_table()
-            else:
-                logger.info(f"DB count ({len(rows)}) != Source count ({len(all_stories)}). Re-syncing...")
-                self.db.clear_stories()
+        if db_count != len(all_stories):
+            logger.info(f"DB count ({db_count}) != Source count ({len(all_stories)}). Re-syncing...")
+            self.db.clear_stories()
 
             logger.info(f"Embedding {len(all_stories)} items...")
 
