@@ -101,7 +101,7 @@ class OverlayWindow(QWidget):
         self.old_pos = None
         self.current_ai_item = None
         self.has_animated_in = False  # Track if initial animation played
-        self.has_animated_in = False  # Track if initial animation played
+        self.last_style_level = None  # Performance: Track last audio level style
 
         # Layout
         self.main_layout = QVBoxLayout()
@@ -594,21 +594,33 @@ class OverlayWindow(QWidget):
         width = self.audio_bar.width()
         fill_width = int(width * level)
         self.audio_bar_fill.setFixedWidth(fill_width)
+
+        # Determine current style category
         if level > 0.8:
-            self.audio_bar_fill.setStyleSheet("""
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #FF5722, stop:1 #F44336);
-                border-radius: 2px;
-            """)
+            new_style_level = 2
         elif level > 0.5:
-            self.audio_bar_fill.setStyleSheet("""
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #FFC107, stop:1 #FF9800);
-                border-radius: 2px;
-            """)
+            new_style_level = 1
         else:
-            self.audio_bar_fill.setStyleSheet("""
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #4CAF50, stop:1 #8BC34A);
-                border-radius: 2px;
-            """)
+            new_style_level = 0
+
+        # Only update stylesheet if category changes to avoid expensive parsing
+        if new_style_level != self.last_style_level:
+            self.last_style_level = new_style_level
+            if new_style_level == 2:
+                self.audio_bar_fill.setStyleSheet("""
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                        stop:0 #FF5722, stop:1 #F44336);
+                    border-radius: 2px;
+                """)
+            elif new_style_level == 1:
+                self.audio_bar_fill.setStyleSheet("""
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                        stop:0 #FFC107, stop:1 #FF9800);
+                    border-radius: 2px;
+                """)
+            else:
+                self.audio_bar_fill.setStyleSheet("""
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                        stop:0 #4CAF50, stop:1 #8BC34A);
+                    border-radius: 2px;
+                """)
