@@ -49,5 +49,19 @@ class TestDatabase(unittest.TestCase):
         row = cursor.fetchone()
         self.assertEqual(row[0], "Hello")
 
+    def test_get_story_count(self):
+        # Initial count should be 0
+        self.assertEqual(self.db.get_story_count(), 0)
+
+        # Add stories
+        self.db.add_story("tag1", "content1", "style1", "[]")
+        self.db.add_story("tag2", "content2", "style2", "[]")
+
+        self.assertEqual(self.db.get_story_count(), 2)
+
+        # Clear
+        self.db.clear_stories()
+        self.assertEqual(self.db.get_story_count(), 0)
+
 if __name__ == '__main__':
     unittest.main()

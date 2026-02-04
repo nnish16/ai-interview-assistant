@@ -124,6 +124,20 @@ class DatabaseManager:
         finally:
             conn.close()
 
+    def get_story_count(self):
+        """Returns the number of stories in the database."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('SELECT COUNT(*) FROM stories')
+            count = cursor.fetchone()[0]
+        except Exception as e:
+            logger.error(f"Error getting story count: {e}")
+            count = 0
+        finally:
+            conn.close()
+        return count
+
     def get_all_stories(self):
         """Returns list of (id, tag, content, style, embedding)."""
         conn = self.get_connection()
