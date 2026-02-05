@@ -149,7 +149,19 @@ class LLMService:
             logger.error(f"Transcription error: {e}")
             return f"Transcription Failed: {e}"
 
-    def generate_answer(self, query):
+    def undo_last_turn(self):
+        """Removes the last AI response and User query from history and returns the User query."""
+        if len(self.transcript_history) >= 2:
+            # Verify structure: User -> Assistant
+            if (self.transcript_history[-1]['role'] == 'assistant' and
+                self.transcript_history[-2]['role'] == 'user'):
+
+                _ = self.transcript_history.pop() # Remove AI
+                user_msg = self.transcript_history.pop() # Remove User
+                return user_msg['content']
+        return None
+
+    def generate_answer(self, query, short_circuit_history=False, system_instruction=None):
         """Streams answer using ZhipuAI (Primary) with OpenRouter (Backup)."""
 
         # RAG Retrieval
@@ -169,6 +181,10 @@ class LLMService:
             {"role": "system", "content": self.system_prompt_base + rag_instruction},
             {"role": "system", "content": f"Context Data:\n{self.context_text}"}
         ]
+
+        # Temporary instruction for regeneration
+        if system_instruction:
+            messages.append({"role": "system", "content": system_instruction})
 
         # Inject history
         messages.extend(recent_history)

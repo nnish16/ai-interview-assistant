@@ -73,6 +73,7 @@ class OverlayWindow(QWidget):
     request_settings = pyqtSignal()
     toggle_listening = pyqtSignal(bool) # True = Start, False = Stop/Pause
     end_interview = pyqtSignal()
+    regenerate_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -271,7 +272,7 @@ class OverlayWindow(QWidget):
         self.main_layout.addWidget(self.audio_bar)
 
         # --- Footer (Hotkeys) ---
-        self.footer_label = QLabel("M: Toggle Mute  •  ↑/↓: Scroll History")
+        self.footer_label = QLabel("M: Toggle Mute  •  R: Regenerate  •  ↑/↓: Scroll History")
         self.footer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.footer_label.setStyleSheet("""
             color: rgba(255, 255, 255, 0.35);
@@ -411,6 +412,10 @@ class OverlayWindow(QWidget):
         self.sc_mute = QShortcut(QKeySequence(Qt.Key.Key_M), self)
         self.sc_mute.activated.connect(self.toggle_mute)
 
+        # Key 'R' to regenerate response
+        self.sc_regen = QShortcut(QKeySequence(Qt.Key.Key_R), self)
+        self.sc_regen.activated.connect(self.regenerate_requested.emit)
+
     def scroll_up(self):
         if self.scroll_area.isVisible():
             val = self.scroll_area.verticalScrollBar().value()
@@ -517,6 +522,19 @@ class OverlayWindow(QWidget):
 
         self.current_ai_item.append_text(chunk)
         self.scroll_to_bottom()
+
+    def reset_last_ai_message(self):
+        """Clears the text of the last AI message and prepares it for new streaming."""
+        count = self.content_layout.count()
+        # Iterate backwards to find last AI item
+        for i in range(count - 1, -1, -1):
+            item = self.content_layout.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                if isinstance(widget, ConversationItem) and widget.role_label.text() == "AI":
+                    widget.text_label.setText("")
+                    self.current_ai_item = widget
+                    return
 
     def set_full_text(self, text):
         """Legacy/System message support."""

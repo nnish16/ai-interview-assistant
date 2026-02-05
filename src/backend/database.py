@@ -89,6 +89,30 @@ class DatabaseManager:
         conn.close()
         logger.debug(f"Saved transcript for {role}")
 
+    def delete_last_transcript(self, interview_id, role):
+        """Deletes the most recent transcript entry for a specific role and interview."""
+        if not interview_id:
+            return
+
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        # Find the max ID for this interview and role
+        cursor.execute('''
+            DELETE FROM transcripts
+            WHERE id = (
+                SELECT MAX(id) FROM transcripts
+                WHERE interview_id = ? AND role = ?
+            )
+        ''', (interview_id, role))
+
+        if cursor.rowcount > 0:
+            logger.info(f"Deleted last transcript for {role} (Interview {interview_id})")
+        else:
+            logger.warning(f"No transcript found to delete for {role} (Interview {interview_id})")
+
+        conn.commit()
+        conn.close()
+
     def add_story(self, tag, content, style, embedding_json):
         """Adds a story with its embedding."""
         conn = self.get_connection()

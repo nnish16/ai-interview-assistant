@@ -42,6 +42,29 @@ class LLMWorker(QObject):
         self.answer_complete.emit(full_answer)
         self.finished.emit()
 
+class RegenerationWorker(QObject):
+    """Worker to handle regeneration of the last answer."""
+    answer_chunk = pyqtSignal(str)
+    answer_complete = pyqtSignal(str)
+    finished = pyqtSignal()
+
+    def __init__(self, llm_service, query):
+        super().__init__()
+        self.llm_service = llm_service
+        self.query = query
+
+    def run(self):
+        full_answer = ""
+        # Provide variation instruction
+        instruction = "Provide a variation or alternative phrasing for this response. Keep the same core meaning but change the delivery."
+
+        for chunk in self.llm_service.generate_answer(self.query, system_instruction=instruction):
+            full_answer += chunk
+            self.answer_chunk.emit(chunk)
+
+        self.answer_complete.emit(full_answer)
+        self.finished.emit()
+
 class ReportWorker(QObject):
     finished = pyqtSignal()
 
@@ -85,6 +108,7 @@ class MainController(QObject):
         self.overlay.request_settings.connect(self.open_settings)
         self.overlay.toggle_listening.connect(self.handle_listening_toggle)
         self.overlay.end_interview.connect(self.handle_end_interview)
+        self.overlay.regenerate_requested.connect(self.handle_regeneration)
 
         # Backend
         self.llm_service = LLMService(
@@ -231,6 +255,44 @@ class MainController(QObject):
 
     def cleanup_thread(self):
         self.worker_thread = None
+
+    def handle_regeneration(self):
+        """Regenerates the last AI response."""
+        # Check if busy
+        try:
+            if self.worker_thread and self.worker_thread.isRunning():
+                return
+        except RuntimeError:
+            self.worker_thread = None
+
+        # Undo last turn
+        last_query = self.llm_service.undo_last_turn()
+        if not last_query:
+            return # Nothing to regenerate
+
+        # Clean up database: Remove the duplicate AI response that we are about to regenerate
+        # The user query remains valid, so we keep it. We only replace the AI answer.
+        self.db.delete_last_transcript(self.current_interview_id, "ai")
+
+        # Update UI
+        self.overlay.reset_last_ai_message()
+        self.overlay.set_status("processing")
+
+        # Start Worker
+        self.worker_thread = QThread()
+        self.worker = RegenerationWorker(self.llm_service, last_query)
+        self.worker.moveToThread(self.worker_thread)
+
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker.answer_chunk.connect(self.overlay.add_answer_chunk)
+        self.worker.answer_complete.connect(self.save_ai_transcript) # Save the new version
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+        self.worker_thread.finished.connect(self.cleanup_thread)
+        self.worker_thread.finished.connect(lambda: self.overlay.set_status("listening" if self.overlay.is_listening else "idle"))
+
+        self.worker_thread.start()
 
 def main():
     app = QApplication(sys.argv)
