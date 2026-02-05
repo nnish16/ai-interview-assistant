@@ -43,6 +43,9 @@ class AudioService(QObject):
         self.max_silence_frames = int(self.max_silence_duration_ms / frame_duration_ms)
         self.min_speech_frames = int(self.min_speech_duration_ms / frame_duration_ms)
 
+        # Performance counters
+        self.frame_count = 0
+
     def list_devices(self):
         """Returns a list of input devices."""
         try:
@@ -107,7 +110,11 @@ class AudioService(QObject):
         while self.running or not self.log_queue.empty():
             try:
                 msg = self.log_queue.get(timeout=0.1)
-                print(msg)
+                if isinstance(msg, tuple) and msg[0] == "RMS":
+                    # Defer string formatting to here
+                    print(f"[Audio] RMS: {msg[1]:.3f}")
+                else:
+                    print(msg)
             except queue.Empty:
                 continue
 
@@ -153,8 +160,9 @@ class AudioService(QObject):
         level = min(rms / 10000.0, 1.0) # Sensitivity tuning: 10000 as "max" volume
         self.audio_level.emit(level)
 
-        if np.random.random() < 0.05: # Log RMS occasionally (5% of frames)
-             self.log_queue.put(f"[Audio] RMS: {level:.3f}")
+        self.frame_count += 1
+        if self.frame_count % 20 == 0: # Log RMS occasionally (every 20th frame ~ 5%)
+             self.log_queue.put(("RMS", level))
 
         # webrtcvad expects bytes
         frame_bytes = frame.tobytes()
