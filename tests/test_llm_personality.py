@@ -33,7 +33,7 @@ class TestLLMPersonality(unittest.TestCase):
 
             service = LLMService(self.mock_db_manager)
 
-            expected_start = "You are an interview assistant. Be brief, direct, and conversational."
+            expected_start = "You are the candidate"
             self.assertTrue(service.system_prompt_base.startswith(expected_start))
 
     def test_custom_personality(self):
