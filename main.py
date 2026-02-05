@@ -177,8 +177,20 @@ class MainController(QObject):
         )
 
     def open_settings(self):
-        dlg = SettingsDialog()
+        dlg = SettingsDialog(parent=None, db_manager=self.db) # Pass DB for read-only listing
+
+        # Connect Config updates
         dlg.config_updated.connect(self.reload_context)
+
+        # Connect Story Engine updates
+        # Note: We run these in background if possible, but for MVP sync is okay for "Add"
+        # actually add_new_story calls embedding model which is heavy.
+        # But settings dialog is modal.
+        # Let's run it in a thread if possible, or just accept the lag for now.
+        # Given "Add" is user initiated, a spinner would be best, but blocking is acceptable for MVP.
+        dlg.story_added.connect(self.llm_service.story_engine.add_new_story)
+        dlg.story_deleted.connect(self.llm_service.story_engine.delete_story)
+
         dlg.exec()
 
     def handle_listening_toggle(self, should_listen):
@@ -269,6 +281,12 @@ class MainController(QObject):
         last_query = self.llm_service.undo_last_turn()
         if not last_query:
             return # Nothing to regenerate
+
+        # Fix State Corruption:
+        # undo_last_turn removed the User query from memory, but it still exists in DB.
+        # We need to add it back to memory so history is [..., User, AI_New] after regeneration.
+        # We append directly to list to avoid triggering a DB save.
+        self.llm_service.transcript_history.append({"role": "user", "content": last_query})
 
         # Clean up database: Remove the duplicate AI response that we are about to regenerate
         # The user query remains valid, so we keep it. We only replace the AI answer.
