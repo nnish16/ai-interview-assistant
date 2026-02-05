@@ -165,3 +165,24 @@ class StoryEngine:
         if max_score >= threshold:
             return stories[best_idx]
         return None
+
+    def add_new_story(self, tag, content, style):
+        """Adds a single story, computes embedding, saves to DB, and updates cache."""
+        if not self.model:
+            self.model = SentenceTransformer('all-MiniLM-L6-v2')
+
+        # 1. Compute Embedding
+        embedding = self.model.encode(content)
+        emb_blob = embedding.tobytes()
+
+        # 2. Add to DB
+        self.db.add_story(tag, content, style, emb_blob)
+
+        # 3. Refresh Cache
+        self.refresh_cache()
+        logger.info(f"Added new story: {tag}")
+
+    def delete_story(self, story_id):
+        """Deletes a story by ID and refreshes cache."""
+        self.db.delete_story(story_id)
+        self.refresh_cache()

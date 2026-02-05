@@ -124,6 +124,15 @@ class DatabaseManager:
         conn.commit()
         conn.close()
 
+    def delete_story(self, story_id):
+        """Deletes a story by ID."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM stories WHERE id = ?', (story_id,))
+        conn.commit()
+        conn.close()
+        logger.info(f"Deleted story {story_id}")
+
     def bulk_add_stories(self, stories_data):
         """
         Adds multiple stories in a single transaction.
