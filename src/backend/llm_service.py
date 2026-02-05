@@ -36,7 +36,9 @@ class LLMService:
 
         self.context_text = ""
         self.transcript_history = []
-        self.system_prompt_base = (
+
+        # Personality / System Prompt Setup
+        default_system_prompt = (
             "You are an interview assistant. Be brief, direct, and conversational. "
             "Do not use bullet points. Use natural language. "
             "Base your answers on the provided resume and job description context. "
@@ -45,6 +47,18 @@ class LLMService:
             "EXECUTION: When answering, SUBTLY weave these values into your response. Do not explicitly say 'You mentioned...'. "
             "Instead, DEMONSTRATE that you possess the specific trait or expertise they value. Position the user as the perfect solution to their specific pain points."
         )
+
+        personality_file = "data/personality.txt"
+        if os.path.exists(personality_file):
+            try:
+                with open(personality_file, "r") as f:
+                    self.system_prompt_base = f.read().strip()
+                logger.info(f"Loaded custom personality from {personality_file}")
+            except Exception as e:
+                logger.error(f"Failed to load personality file: {e}")
+                self.system_prompt_base = default_system_prompt
+        else:
+            self.system_prompt_base = default_system_prompt
 
     def _init_clients(self):
         if self.groq_key:
