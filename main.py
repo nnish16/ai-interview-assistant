@@ -270,6 +270,10 @@ class MainController(QObject):
         if not last_query:
             return # Nothing to regenerate
 
+        # Clean up database: Remove the duplicate AI response that we are about to regenerate
+        # The user query remains valid, so we keep it. We only replace the AI answer.
+        self.db.delete_last_transcript(self.current_interview_id, "ai")
+
         # Update UI
         self.overlay.reset_last_ai_message()
         self.overlay.set_status("processing")

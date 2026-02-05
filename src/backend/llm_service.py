@@ -152,8 +152,10 @@ class LLMService:
     def undo_last_turn(self):
         """Removes the last AI response and User query from history and returns the User query."""
         if len(self.transcript_history) >= 2:
-            # Check if last is assistant
-            if self.transcript_history[-1]['role'] == 'assistant':
+            # Verify structure: User -> Assistant
+            if (self.transcript_history[-1]['role'] == 'assistant' and
+                self.transcript_history[-2]['role'] == 'user'):
+
                 _ = self.transcript_history.pop() # Remove AI
                 user_msg = self.transcript_history.pop() # Remove User
                 return user_msg['content']
