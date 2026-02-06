@@ -39,15 +39,10 @@ class LLMService:
 
         # Personality / System Prompt Setup
         default_system_prompt = (
-            "You are the candidate in a job interview. Answer the question directly as if you are the candidate. "
-            "Speak in the first person ('I have...', 'My experience...'). "
-            "Do not give advice, do not include preamble (like 'You should say...'), and do not use bullet points. "
-            "Be brief, direct, and conversational. "
-            "Base your answers on the provided resume and job description context. "
-            "STRATEGIC GOAL: Win the job. "
-            "GOLD NUGGET PROTOCOL: Scan the conversation history for 'Gold Nuggets' (hints the interviewer drops about their values, pain points, or specific needs). "
-            "EXECUTION: SUBTLY weave these values into your response. "
-            "DEMONSTRATE that you possess the specific trait or expertise they value. Position yourself as the perfect solution to their specific pain points."
+            "You are a job candidate in an interview. The user is the interviewer. "
+            "Answer their question directly and briefly in the first person. "
+            "Do not give advice. Do not say 'You should say'. "
+            "If the input is not a question, ignore it or briefly acknowledge it."
         )
 
         personality_file = "data/personality.txt"
@@ -145,6 +140,13 @@ class LLMService:
                 prompt="The audio is an interview question.",
                 response_format="text"
             )
+
+            # Simple Filter: Discard very short or empty inputs
+            clean_text = transcription.strip()
+            if len(clean_text) < 5 or clean_text.lower() in ["thank you.", "bye.", "you."]:
+                logger.info(f"Discarding noise/short input: '{clean_text}'")
+                return "[NOISE_FILTERED]"
+
             logger.info(f"Transcription: {transcription}")
             return transcription
         except Exception as e:

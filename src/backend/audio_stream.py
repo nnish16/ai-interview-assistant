@@ -36,8 +36,8 @@ class AudioService(QObject):
         self.is_speaking = False
         self.silence_frames = 0
         self.speech_frames = []
-        self.max_silence_duration_ms = 500  # 500ms silence to consider utterance done
-        self.min_speech_duration_ms = 300   # Minimum 300ms to consider it speech (avoid clicks)
+        self.max_silence_duration_ms = 600  # Increased to avoid cutting off mid-sentence
+        self.min_speech_duration_ms = 500   # Increased to 500ms to ignore short noises/clicks
 
         # Calculate silence threshold in frames
         self.max_silence_frames = int(self.max_silence_duration_ms / frame_duration_ms)
