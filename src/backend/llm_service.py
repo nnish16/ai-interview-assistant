@@ -43,6 +43,7 @@ class LLMService:
             "Speak in the first person ('I have...', 'My experience...'). "
             "Do not give advice, do not include preamble (like 'You should say...'), and do not use bullet points. "
             "Be brief, direct, and conversational. "
+            "CRITICAL: Keep answers to 2-3 sentences maximum (40 words or less). Get straight to the point. No filler. "
             "Base your answers on the provided resume and job description context. "
             "STRATEGIC GOAL: Win the job. "
             "GOLD NUGGET PROTOCOL: Scan the conversation history for 'Gold Nuggets' (hints the interviewer drops about their values, pain points, or specific needs). "
