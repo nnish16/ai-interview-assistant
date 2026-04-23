@@ -1,58 +1,113 @@
-# AI Interview Assistant (Cluely Clone)
+# AI Interview Assistant
 
-A "Dynamic Island" style desktop application that listens to your interviews and streams intelligent answers in real-time.
+> Real-time interview coach that transcribes live calls and generates context-aware answers from your resume and job description.
+
+[![CI](https://github.com/nnish16/ai-interview-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/nnish16/ai-interview-assistant/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+
+## The Problem
+
+Technical interviews are stressful. You're simultaneously listening, thinking, coding, and communicating — all while being evaluated. What if you had an AI co-pilot that could listen to the conversation and surface relevant answers from your own experience?
+
+## The Solution
+
+AI Interview Assistant is a desktop overlay app that:
+
+1. **Listens** to your interview audio in real-time (via virtual audio loopback)
+2. **Transcribes** speech using Groq's Distil-Whisper (sub-2s latency)
+3. **Generates** contextual answers using your resume, job description, and personal stories
+4. **Displays** responses in a non-intrusive "Dynamic Island" style overlay
 
 ## Features
 
-- **Dynamic Island UI**: A frameless, transparent overlay that expands when answers are generated.
-- **Real-time Transcription**: Uses Groq (Distil-Whisper) for ultra-fast speech-to-text.
-- **Intelligent Answers**: Uses Llama 3 (via OpenRouter) to generate concise, conversational answers.
-- **Context Aware**: Upload your resume and job description to ground the AI's responses.
-- **Privacy Focused**: Processes audio only when you want it to.
+- **Real-time transcription** — Groq Whisper processes audio chunks as they arrive
+- **Context-aware answers** — grounded in your uploaded resume + JD + personal anecdotes
+- **Story Engine** — RAG-based retrieval of your personal experiences via SentenceTransformer embeddings
+- **Dynamic Island UI** — frameless, transparent PyQt6 overlay that expands when answers arrive
+- **Interview reports** — post-call summary with all Q&A pairs saved to SQLite
+- **Multi-LLM fallback** — ZhipuAI GLM-4 → OpenRouter Llama 3 → Groq, with automatic failover
+- **Hotkey controls** — `R` to regenerate, customizable shortcuts
+- **Privacy-first** — no audio stored, transcript-only persistence
 
-## Audio Setup (Crucial)
+## Tech Stack
 
-To allow the app to "hear" the interviewer from your video call software (Zoom, Teams, Google Meet), you must use a virtual audio loopback driver. We recommend **BlackHole 2ch** on macOS.
+| Component | Technology |
+|-----------|-----------|
+| UI Framework | PyQt6 |
+| Transcription | Groq Distil-Whisper |
+| LLM (primary) | ZhipuAI GLM-4 |
+| LLM (fallback) | OpenRouter (Llama 3), Groq |
+| Embeddings | SentenceTransformer (all-MiniLM-L6-v2) |
+| Audio | sounddevice + webrtcvad |
+| Database | SQLite |
+| Resume parsing | pypdf |
 
-### macOS Setup
-1. **Install BlackHole 2ch**:
-   ```bash
-   brew install blackhole-2ch
-   ```
-2. **Configure System Audio**:
-   - Open **Audio MIDI Setup** on your Mac.
-   - Create a **Multi-Output Device**.
-   - Select both your **Headphones/Speakers** AND **BlackHole 2ch**.
-   - Set this Multi-Output Device as your system output. This allows you to hear the audio *and* route it to BlackHole simultaneously.
-3. **App Setup**:
-   - Launch this application.
-   - The Setup Wizard will ask you to select the input device. Choose **BlackHole 2ch**.
+## Quick Start
 
-### Windows/Linux Setup
-- Use **VB-Cable** or similar loopback software to route system audio to an input device.
+### Prerequisites
 
-## Configuration
+- Python 3.10+
+- A virtual audio loopback driver ([BlackHole](https://existential.audio/blackhole/) on macOS, [VB-Cable](https://vb-audio.com/Cable/) on Windows)
+- API keys: Groq, OpenRouter, and/or ZhipuAI
 
-The application requires API keys for Groq and OpenRouter. You can enter these in the Settings menu within the app, or create a `.env` file in the root directory:
+### Installation
 
-```env
-GROQ_API_KEY=your_groq_api_key
-OPENROUTER_API_KEY=your_openrouter_api_key
+```bash
+git clone https://github.com/nnish16/ai-interview-assistant.git
+cd ai-interview-assistant
+pip install -r requirements.txt
 ```
 
-## Running the App
+### Running
 
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Run the application:
-   ```bash
-   python main.py
-   ```
+```bash
+python main.py
+```
 
-## Project Structure
+The setup wizard will guide you through audio device selection and API key configuration on first run.
 
-- `src/ui/`: GUI components (Overlay, Settings, Wizard).
-- `src/backend/`: Audio processing and LLM integration.
-- `data/`: Stores your resume and config files.
+### Audio Setup
+
+To capture interviewer audio from Zoom/Teams/Meet:
+
+1. Install a virtual audio loopback (e.g., BlackHole 2ch)
+2. Create a Multi-Output Device in Audio MIDI Setup (macOS) combining your speakers + BlackHole
+3. Set the Multi-Output Device as your system output
+4. In the app, select BlackHole as the input device
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│                  main.py                     │
+│           (PyQt6 Application)                │
+├─────────────┬───────────┬───────────────────┤
+│  Audio      │  LLM      │  Story Engine     │
+│  Service    │  Service   │  (RAG)            │
+│  ┌────────┐ │ ┌────────┐│ ┌───────────────┐ │
+│  │sounddev│ │ │ZhipuAI ││ │SentenceTransf.│ │
+│  │webrtcvad│ │ │OpenRtr ││ │SQLite vectors │ │
+│  │Groq    │ │ │Groq    ││ │Resume+JD ctx  │ │
+│  └────────┘ │ └────────┘│ └───────────────┘ │
+├─────────────┴───────────┴───────────────────┤
+│          Dynamic Island UI (PyQt6)           │
+│     Frameless • Transparent • Always-on-top  │
+└─────────────────────────────────────────────┘
+```
+
+## Roadmap
+
+- [ ] Windows + Linux audio setup guides
+- [ ] Streaming transcription (no chunking delay)
+- [ ] Export interview prep deck (PDF)
+- [ ] Browser extension for web-based interviews
+- [ ] Test coverage > 80%
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+
+## License
+
+[MIT](LICENSE) — Nishant Sarang
